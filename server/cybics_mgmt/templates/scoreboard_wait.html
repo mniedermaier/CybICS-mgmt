@@ -12,7 +12,7 @@
 {# Shown by /scoreboard while no public event has started; follow.js
    reloads the page as soon as one does. #}
 <div class="board-app board-wait" data-follow="{{ url_for('api.current_scoreboard') }}" data-slug="">
-  <img class="board-logo" src="{{ url_for('static', filename='img/cybics-logo.png') }}" alt="CybICS" width="196" height="40">
+  <img class="board-logo" src="{{ url_for('static', filename='img/cybics-wordmark.svg') }}" alt="CybICS" width="190" height="40">
   <h1>{{ server_name }}</h1>
   <p class="wait-lead">The scoreboard appears here as soon as an event starts.</p>
   {% if public_url %}<p class="wait-url">Join from your CybICS landing page: <span class="mono">{{ public_url }}</span></p>{% endif %}

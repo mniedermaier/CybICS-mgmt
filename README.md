@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="CybICS Logo" src="docs/pics/CybICS_logo.png" height="120" />
+  <img alt="CybICS" src="docs/pics/cybics-wordmark.svg" height="100" />
   <p align="center"><strong>mgmt</strong> &middot; Manage every CybICS installation from one place, and run CTF events on them.</p>
 </p>
 
