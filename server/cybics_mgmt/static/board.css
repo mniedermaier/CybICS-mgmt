@@ -13,8 +13,8 @@
   --glow-1: rgba(255, 107, 0, 0.30);
   --glow-2: rgba(255, 107, 0, 0.12);
   --glow-3: rgba(127, 127, 127, 0.10);
-  --up: #3ddc71;
-  --down: #ff5c5c;
+  --up: #22c55e;
+  --down: #ef4444;
   --row-h: clamp(3.2rem, 6.2vh, 5.2rem);
   --shadow: rgba(0, 0, 0, .35);
   --accent-glow: rgba(255, 107, 0, .6);
@@ -52,7 +52,7 @@
   --card: rgba(255, 255, 255, 0.78);
   --card-border: rgba(15, 23, 42, 0.10);
   --card-hi: rgba(255, 107, 0, 0.12);
-  --grid-line: rgba(194, 65, 12, 0.14);
+  --grid-line: rgba(179, 71, 0, 0.14);
   --glow-1: rgba(255, 107, 0, 0.18);
   --glow-2: rgba(255, 107, 0, 0.08);
   --glow-3: rgba(127, 127, 127, 0.08);

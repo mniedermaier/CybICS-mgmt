@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ server_name }}{% endblock %}</title>
-  <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="{{ url_for('static', filename='img/cybics-mark.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
   <link rel="preload" href="{{ url_for('static', filename='fonts/InterVariable.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {# Synchronous on purpose: sets data-theme before the first paint. #}
@@ -14,7 +16,7 @@
 <body class="{% block body_class %}{% endblock %}">
 <header class="top">
   <a class="brand" href="{{ url_for('public.index') }}">
-    <img src="{{ url_for('static', filename='img/cybics-logo.png') }}" alt="CybICS" width="127" height="26">
+    <img src="{{ url_for('static', filename='img/cybics-wordmark.svg') }}" alt="CybICS" width="124" height="26">
     <span>mgmt</span>
   </a>
   <nav>{% block nav %}{% endblock %}</nav>
