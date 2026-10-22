@@ -51,7 +51,8 @@ Never stage `server/data/`, `*.sqlite`, `.env` or anything holding a real admin 
   - `device_input.py`: checks for what installations send about themselves (identity, status),
     shared by both parts.
   - `security.py`: tokens, hashing, the rate limiter, admin password and session, CSRF.
-  - `host.py`: requests to the host on the Raspberry Pi image (the `pi` password), through
+  - `host.py`: requests to the host on the Raspberry Pi image (the `pi` password, the settings of
+    `cybics-mgmt.txt` on the admin page *Raspberry Pi*), through
     `MGMT_HOST_DIR`; the image's root service `cybics-mgmt-host` applies them.
   - `db.py`: SQLite and migrations.
   - `views.py`: template filters, error pages and security headers.
@@ -81,8 +82,10 @@ Never stage `server/data/`, `*.sqlite`, `.env` or anything holding a real admin 
 - `image/`: the Raspberry Pi image (Pi 3, 4, 5, Zero 2 W). `build.sh` builds both containers for
   arm64 and runs pi-gen (submodule `image/pi-gen`, branch `arm64`, pinned like CybICS'). The stage
   `image/stage-mgmt/` ships the `cybics-mgmt` access point (10.42.0.1/24), the compose stack on port
-  80 (generated from `docker-compose.yml`, so there is one source) and `cybics-mgmt.txt` on the boot
-  partition, applied at every boot by `cybics-mgmt-config`. `.github/workflows/rpi-image.yml` builds it
+  80 (generated from `docker-compose.yml`, so there is one source), `cybics-mgmt.txt` on the boot
+  partition, applied at every boot by `cybics-mgmt-config`, and (`03-kiosk/`) the HDMI kiosk: `cage`
+  and Chromium on tty1 as the user `cybics-kiosk`, showing `/scoreboard`, switched by
+  `HDMI_SCOREBOARD`. `.github/workflows/rpi-image.yml` builds it
   on tags (and attaches it to the release) and on pull requests that change `image/`.
 - `ruff.toml`: lint configuration, with `target-version = py39` for the client.
 
@@ -194,7 +197,9 @@ same way: `docker run --rm -v "$PWD:/src" python:3.12-alpine sh -c 'cd /src && r
   and a change ends every other session.
 - **The server never acts on its host by itself.** On the Raspberry Pi image it may only drop a
   request into `MGMT_HOST_DIR` (a tmpfs); `cybics-mgmt-host` accepts nothing but a new password for
-  `pi`, moves the request out of the server's reach first and reports in `status.json`. That
+  `pi` and values for the keys of `cybics-mgmt.txt`, which it checks with `cybics-mgmt-config`'s
+  own `CHECKS` (the same rules as at boot; `host.SETTINGS` repeats them for the UI, keep both in
+  sync). It moves each request out of the server's reach first and reports in `status.json`. That
   directory belongs to the container, so the root service follows no symlink in it, reads only
   regular files and keeps its own state in `/run/cybics-mgmt-host`. The containers stay
   unprivileged.
@@ -277,7 +282,10 @@ Per-instance flags would be a CybICS-wide change and are discussed in `docs/ARCH
   - `static/scoreboard.js`: polling, FLIP row movement keyed by team name, count-up, the feed and
     the first-blood queue;
   - `static/board-bg.js`: the canvas network backdrop, capped at about 30 fps and paused in hidden
-    tabs.
+    tabs;
+  - `static/follow.js` and `templates/scoreboard_wait.html`: `/scoreboard`, the page for a screen
+    nobody touches (the Pi's HDMI output). It shows `ctf.current_public_event()`, polls
+    `/api/v1/scoreboard/current` and reloads when the event changes.
 
   Nothing animates on the first load, only changes after it. Every animation must stop under
   `prefers-reduced-motion`. Element styles are set only through the CSSOM (`el.style.x`,

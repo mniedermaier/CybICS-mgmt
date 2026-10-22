@@ -1,0 +1,28 @@
+#!/bin/bash
+# The current scoreboard full screen on the HDMI output, as the user
+# cybics-kiosk (cybics-mgmt-kiosk.service). /scoreboard follows the server
+# from event to event and waits on a page of its own while there is none,
+# so nobody ever has to touch this screen.
+set -u
+
+# Written by cybics-mgmt-config from HDMI_THEME in cybics-mgmt.txt.
+theme="$(cat /run/cybics-mgmt-kiosk 2>/dev/null)"
+case "$theme" in
+    light|dark) ;;
+    *) theme=dark ;;
+esac
+
+# The first boot loads the containers before the server answers; a browser
+# started earlier would sit on an error page.
+until python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1/healthz", timeout=3)' 2>/dev/null; do
+    sleep 3
+done
+
+# cage: one application, full screen, no desktop (-d: no window decorations,
+# -s: Ctrl+Alt+F2 still reaches the console on tty2).
+exec cage -d -s -- chromium \
+    --kiosk --incognito --noerrdialogs --disable-infobars --no-first-run \
+    --disable-session-crashed-bubble --disable-features=Translate,MediaRouter \
+    --check-for-update-interval=31536000 --password-store=basic \
+    --ozone-platform=wayland \
+    "http://127.0.0.1/scoreboard?theme=$theme"

@@ -12,7 +12,8 @@
   <canvas id="network"></canvas>
 </div>
 
-<div class="board-app" data-scoreboard="{{ url_for('api.event_scoreboard', slug=event.slug) }}">
+<div class="board-app" data-scoreboard="{{ url_for('api.event_scoreboard', slug=event.slug) }}"
+     {% if follow %}data-follow="{{ url_for('api.current_scoreboard') }}" data-slug="{{ event.slug }}"{% endif %}>
   <header class="board-top">
     <div class="title">
       <img class="board-logo" src="{{ url_for('static', filename='img/cybics-logo.png') }}" alt="CybICS" width="196" height="40">
@@ -70,4 +71,5 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='scoreboard.js') }}"></script>
 <script src="{{ url_for('static', filename='board-bg.js') }}"></script>
+{% if follow %}<script src="{{ url_for('static', filename='follow.js') }}"></script>{% endif %}
 {% endblock %}

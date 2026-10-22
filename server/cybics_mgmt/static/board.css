@@ -312,3 +312,12 @@ body.board main { max-width: none; padding: clamp(1rem, 2.5vh, 2rem) clamp(1rem,
               color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 55%, transparent); }
 .bonus-rule[hidden] { display: none; }
 .feed .bonus { font: 700 .85em var(--mono); color: var(--bad); margin-left: .35rem; white-space: nowrap; }
+
+/* ---------- /scoreboard while no event has started ---------- */
+.board-wait { min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem; text-align: center; }
+.board-wait .board-logo { height: clamp(3rem, 9vh, 6rem); }
+.board-wait h1 { margin: 0; font-size: clamp(2rem, 5vw, 4.5rem); letter-spacing: -.02em; color: var(--heading); }
+.board-wait .wait-lead { margin: 0; font-size: clamp(1.1rem, 2.2vw, 2rem); color: var(--muted); }
+.board-wait .wait-url { margin: 0; font-size: clamp(1rem, 1.8vw, 1.6rem); color: var(--text); }
+.board-wait .wait-url .mono { font-family: var(--mono); color: var(--accent-text, var(--accent)); }

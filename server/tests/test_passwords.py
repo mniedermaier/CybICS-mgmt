@@ -1,11 +1,13 @@
-"""The admin password set at the first visit, changing it, and the Raspberry Pi's pi password."""
+"""The admin password set at the first visit, changing it, and the Raspberry Pi's pi password and settings."""
+import importlib.machinery
+import importlib.util
 import json
 import os
 
 import pytest
 
 from conftest import ADMIN_PASSWORD, SIGNING_KEY
-from cybics_mgmt import create_app
+from cybics_mgmt import create_app, host
 from cybics_mgmt.db import get_db
 from cybics_mgmt.security import limiter
 
@@ -201,3 +203,116 @@ def test_without_a_host_directory_there_is_no_pi_section(admin):
     assert b"Raspberry Pi login" not in page
     admin.post("/admin/password", data={**CSRF, "target": "pi", "password": "new-pi-pass",
                                         "confirm": "new-pi-pass"})
+
+
+# ---------- the Raspberry Pi's settings (cybics-mgmt.txt) ----------
+
+PI_SETTINGS = {"WIFI_SSID": "cybics-mgmt", "WIFI_PASSWORD": "cybics-mgmt", "WIFI_COUNTRY": "US",
+               "DEFAULT_ENROL_CODE": "CYBICS-BOARDS", "SERVER_NAME": "CybICS-mgmt", "HDMI_SCOREBOARD": "auto",
+               "HDMI_THEME": "dark"}
+
+
+def reported(app, **extra):
+    """What cybics-mgmt-host reports: the settings now in cybics-mgmt.txt."""
+    with open(os.path.join(app.config["HOST_DIR"], "status.json"), "w") as f:
+        json.dump({"pi_default_password": False, "settings": dict(PI_SETTINGS), **extra}, f)
+
+
+def save(client, current="first-admin-pw", **changes):
+    return client.post("/admin/pi", data={**CSRF, **PI_SETTINGS, "current": current, **changes},
+                       follow_redirects=True)
+
+
+def settings_request(app):
+    path = os.path.join(app.config["HOST_DIR"], "settings.json")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def test_the_pi_settings_page_shows_what_the_pi_reports(fresh):
+    client = logged_in(fresh)
+    assert b"has not reported its settings yet" in client.get("/admin/pi").data
+    reported(fresh, problems=["line 3: unknown setting 'FOO'"], settings_last={"state": "done", "detail": "changed X",
+                                                                               "time": 1.0})
+    page = client.get("/admin/pi").data
+    assert b'value="cybics-mgmt"' in page and b"unknown setting" in page and b"changed X" in page
+    assert b">Raspberry Pi</a>" in client.get("/admin/").data   # in the header on every admin page
+
+
+def test_only_changed_settings_go_to_the_host(fresh):
+    client = logged_in(fresh)
+    reported(fresh)
+    page = save(client, HDMI_SCOREBOARD="ON", HDMI_THEME="light", DEFAULT_ENROL_CODE="room-2")
+    assert b"Sent to the Raspberry Pi" in page.data and b"server restarts" in page.data
+    assert settings_request(fresh) == {"settings": {"HDMI_SCOREBOARD": "on", "HDMI_THEME": "light",
+                                                    "DEFAULT_ENROL_CODE": "ROOM-2"}}
+    assert os.stat(os.path.join(fresh.config["HOST_DIR"], "settings.json")).st_mode & 0o777 == 0o600
+    assert b"being applied" in client.get("/admin/pi").data
+    with fresh.app_context():
+        details = [r[0] for r in get_db().execute(
+            "SELECT details FROM admin_log WHERE action = 'pi_settings_requested'")]
+    assert len(details) == 1 and "HDMI_THEME" in details[0]
+
+
+def test_wifi_changes_need_a_confirmation_and_stay_out_of_the_log(fresh):
+    client = logged_in(fresh)
+    reported(fresh)
+    page = save(client, WIFI_PASSWORD="new-wifi-secret")
+    assert b"Tick the box" in page.data and settings_request(fresh) is None
+    page = save(client, WIFI_PASSWORD="new-wifi-secret", confirm_wifi="1")
+    assert b"access point restarts" in page.data
+    assert settings_request(fresh) == {"settings": {"WIFI_PASSWORD": "new-wifi-secret"}}
+    with fresh.app_context():
+        assert not get_db().execute("SELECT 1 FROM admin_log WHERE details LIKE '%new-wifi-secret%'").fetchone()
+
+
+@pytest.mark.parametrize("changes, message", [
+    ({"WIFI_SSID": "bad\\name"}, b"Wi-Fi name must be"),
+    ({"WIFI_PASSWORD": "short"}, b"Wi-Fi password must be"),
+    ({"WIFI_COUNTRY": "Germany"}, b"Wi-Fi country must be"),
+    ({"DEFAULT_ENROL_CODE": "a b"}, b"Enrolment code for boards must be"),
+    ({"SERVER_NAME": "It's mine"}, b"Server name must be"),
+    ({"SERVER_NAME": "two\nlines"}, b"Server name must be"),
+    ({"HDMI_SCOREBOARD": "maybe"}, b"Scoreboard on HDMI must be"),
+])
+def test_invalid_pi_settings_are_refused(fresh, changes, message):
+    client = logged_in(fresh)
+    reported(fresh)
+    assert message in save(client, confirm_wifi="1", **changes).data
+    assert settings_request(fresh) is None
+
+
+def test_pi_settings_need_the_admin_password_and_a_change(fresh):
+    client = logged_in(fresh)
+    reported(fresh)
+    assert b"current admin password is wrong" in save(client, current="nope", HDMI_THEME="light").data
+    assert b"Nothing changed" in save(client).data
+    assert settings_request(fresh) is None
+
+
+def test_without_a_host_directory_there_is_no_pi_page(admin):
+    assert admin.get("/admin/pi").status_code == 404
+    assert b">Raspberry Pi</a>" not in admin.get("/admin/").data
+
+
+def test_the_settings_rules_match_the_ones_the_pi_applies_at_boot():
+    """host.SETTINGS repeats cybics-mgmt-config's CHECKS for the UI; the host enforces the latter."""
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "image", "stage-mgmt", "02-app", "files",
+                        "cybics-mgmt-config")
+    loader = importlib.machinery.SourceFileLoader("cybics_mgmt_config", path)
+    config = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(config)
+    assert set(host.SETTINGS) == set(config.CHECKS) == set(config.DEFAULTS)
+    samples = ["", "x", "ab", "DE", "de", "Germany", "cybics-mgmt", "pass\\word12", "a" * 33, "a" * 64, "a" * 65,
+               "CYBICS-BOARDS", "room 2", "It's", "two\nlines", "auto", "ON", "off", "maybe", "dark", "Light",
+               "Ünïcödé-Netz", "12345678"]
+    for key in host.SETTINGS:
+        for value in samples:
+            clean, problems = host.settings_problems({key: value})
+            normalised = config.normalise(key, value)
+            assert (not problems) == bool(config.CHECKS[key][0](normalised)), (key, value)
+            if not problems:
+                assert clean[key] == normalised, (key, value)
+        assert not host.settings_problems({key: config.DEFAULTS[key]})[1], key

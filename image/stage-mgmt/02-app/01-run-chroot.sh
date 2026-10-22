@@ -77,13 +77,13 @@ UNIT
 # at boot to report whether pi still has its default password.
 cat > /etc/systemd/system/cybics-mgmt-host.service <<'UNIT'
 [Unit]
-Description=CybICS-mgmt: apply requests from the server (the pi password)
+Description=CybICS-mgmt: apply requests from the server (the pi password, cybics-mgmt.txt)
 After=systemd-tmpfiles-setup.service
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/cybics-mgmt-host
-TimeoutStartSec=60
+TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target
@@ -95,6 +95,7 @@ Description=CybICS-mgmt: watch for requests from the server
 
 [Path]
 PathExists=/run/cybics-mgmt/pi-password.json
+PathExists=/run/cybics-mgmt/settings.json
 Unit=cybics-mgmt-host.service
 
 [Install]

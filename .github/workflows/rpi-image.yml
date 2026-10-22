@@ -180,6 +180,9 @@ jobs:
           - The \`pi\` account starts with the password \`raspberry\` on the console. **Change it**
             under *Passwords* in the web interface; SSH stays off until then.
 
+          - A screen on the HDMI port shows the current scoreboard full screen, without a login
+            (\`HDMI_SCOREBOARD\` in \`cybics-mgmt.txt\`; off by default on a Pi Zero 2 W).
+
           The first boot loads the containers and takes a few minutes; later boots take seconds.
           NOTE
 

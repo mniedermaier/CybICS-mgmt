@@ -144,6 +144,20 @@ def get_event_by_join_code(db, code):
                       (_text(code, "join_code").strip().upper(),)).fetchone()
 
 
+def current_public_event(db):
+    """
+    The event a screen without a chosen event shows (/scoreboard, the HDMI
+    output of the Raspberry Pi image): the public event that runs or is
+    paused, the most recently started first, else the one that finished
+    last. Never a draft. None if there is no such event.
+    """
+    return db.execute("""
+        SELECT * FROM events WHERE scoreboard_public = 1 AND state != 'draft'
+        ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END,
+                 CASE WHEN state = 'finished' THEN finished_at ELSE started_at END DESC, id DESC
+        LIMIT 1""").fetchone()
+
+
 def list_events(db):
     return db.execute("SELECT * FROM events ORDER BY created_at DESC").fetchall()
 

@@ -1,0 +1,60 @@
+{% extends "admin/layout.html" %}
+{% block title %}Raspberry Pi{% endblock %}
+{% block content %}
+<h1>Raspberry Pi</h1>
+<div class="panel">
+  <h2>Settings</h2>
+  <p class="muted">The settings of this Raspberry Pi, the same as in <span class="mono">cybics-mgmt.txt</span> on its SD card's
+    boot partition: saving here writes them into that file, so both always agree.</p>
+  {% if host.settings_pending %}<p class="muted">A change is being applied&hellip;</p>{% endif %}
+  {% if host.settings_last %}
+  <p class="muted">Last change: <span class="badge {{ 'ok' if host.settings_last.state == 'done' else 'bad' }}">{{ host.settings_last.state }}</span>
+    {{ host.settings_last.time|ago }}{% if host.settings_last.detail %} &middot; {{ host.settings_last.detail }}{% endif %}</p>
+  {% endif %}
+  {% if host.problems %}
+  <div class="flash error">Problems in cybics-mgmt.txt:
+    <ul>{% for p in host.problems %}<li>{{ p }}</li>{% endfor %}</ul></div>
+  {% endif %}
+  {% if host.settings is none %}
+  <p class="muted">The Raspberry Pi has not reported its settings yet. Reload the page in a moment.</p>
+  {% else %}
+  {% set s = host.settings %}
+  <form method="post" class="settings">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <h3>Wi-Fi access point</h3>
+    <p class="muted">CybICS boards look for this network. Change the name or the password here, and the same on every
+      board's landing page. Saving a change restarts the access point: every board and laptop on it, this browser
+      too, loses the connection and joins again with the new values.</p>
+    <label>Wi-Fi name<input type="text" name="WIFI_SSID" value="{{ s.WIFI_SSID }}" maxlength="32" required></label>
+    <label>Wi-Fi password<input type="text" name="WIFI_PASSWORD" value="{{ s.WIFI_PASSWORD }}" minlength="8" maxlength="63"
+           autocomplete="off" spellcheck="false" required></label>
+    <label>Country (two letters, e.g. DE)<input type="text" name="WIFI_COUNTRY" value="{{ s.WIFI_COUNTRY }}" minlength="2" maxlength="2"
+           required></label>
+    <label class="check"><input type="checkbox" name="confirm_wifi" value="1"> Restart the access point if the Wi-Fi changes</label>
+
+    <h3>Server</h3>
+    <label>Server name<input type="text" name="SERVER_NAME" value="{{ s.SERVER_NAME }}" maxlength="64" required></label>
+    <label>Enrolment code for boards (empty: boards are not enrolled on their own)
+      <input type="text" name="DEFAULT_ENROL_CODE" value="{{ s.DEFAULT_ENROL_CODE }}" maxlength="16"></label>
+    <p class="muted">Changing these restarts the server; these pages are gone for a few seconds.</p>
+
+    <h3>HDMI output</h3>
+    <label>Scoreboard on HDMI
+      <select name="HDMI_SCOREBOARD">
+        {% for value, text in [("auto", "auto: on with 1 GB of memory or more"), ("on", "on"), ("off", "off: console login")] %}
+        <option value="{{ value }}" {{ 'selected' if s.HDMI_SCOREBOARD == value }}>{{ text }}</option>
+        {% endfor %}
+      </select></label>
+    <label>Theme
+      <select name="HDMI_THEME">
+        {% for value in ("dark", "light") %}<option value="{{ value }}" {{ 'selected' if s.HDMI_THEME == value }}>{{ value }}</option>{% endfor %}
+      </select></label>
+
+    <h3>Confirm</h3>
+    <p><input type="password" name="current" placeholder="Current admin password" aria-label="Current admin password"
+              autocomplete="current-password" required></p>
+    <button type="submit">Save and apply</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

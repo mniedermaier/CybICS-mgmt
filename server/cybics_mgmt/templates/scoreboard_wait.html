@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Scoreboard{% endblock %}
+{% block body_class %}board{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='board.css') }}">{% endblock %}
+{% block content %}
+<div class="board-bg" aria-hidden="true">
+  <div class="glow glow-a"></div><div class="glow glow-b"></div><div class="glow glow-c"></div>
+  <div class="floor"></div>
+  <canvas id="network"></canvas>
+</div>
+
+{# Shown by /scoreboard while no public event has started; follow.js
+   reloads the page as soon as one does. #}
+<div class="board-app board-wait" data-follow="{{ url_for('api.current_scoreboard') }}" data-slug="">
+  <img class="board-logo" src="{{ url_for('static', filename='img/cybics-logo.png') }}" alt="CybICS" width="196" height="40">
+  <h1>{{ server_name }}</h1>
+  <p class="wait-lead">The scoreboard appears here as soon as an event starts.</p>
+  {% if public_url %}<p class="wait-url">Join from your CybICS landing page: <span class="mono">{{ public_url }}</span></p>{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='follow.js') }}"></script>
+<script src="{{ url_for('static', filename='board-bg.js') }}"></script>
+{% endblock %}
