@@ -185,8 +185,11 @@ def password():
                 audit("admin_password_changed")
                 flash("Admin password changed. Every other session has ended.", "ok")
         elif target == "pi" and host.directory():
+            # It also allows sudo on the Pi: a stolen session alone must not be enough.
             problem = host.pi_password_problem(new, confirm)
-            if problem:
+            if not check_admin_password(request.form.get("current", "")):
+                flash("The current admin password is wrong.", "error")
+            elif problem:
                 flash(problem, "error")
             else:
                 host.request_pi_password(new)

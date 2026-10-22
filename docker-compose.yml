@@ -39,7 +39,9 @@ services:
         ipv4_address: ${MGMT_PROXY_IP:-172.29.84.2}
     read_only: true
     tmpfs:
-      - /tmp
+      # Request bodies beyond 8 KB are buffered here; bounded, so slow
+      # uploads cannot eat the container's memory.
+      - /tmp:size=64m
     cap_drop:
       - ALL
     security_opt:

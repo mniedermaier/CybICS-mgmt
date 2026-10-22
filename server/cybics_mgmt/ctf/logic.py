@@ -110,7 +110,7 @@ def _client_time(value):
 
 def create_event(db, slug, name):
     slug = slug.strip().lower()
-    if not SLUG_RE.match(slug):
+    if not SLUG_RE.fullmatch(slug):
         raise CTFError("invalid_slug", "Slug must be lower-case letters, digits and dashes.")
     if not name.strip():
         raise CTFError("invalid_name", "Event name must not be empty.")
@@ -166,11 +166,16 @@ def set_event_state(db, event_id, state):
             # Solves reported against an empty catalog would all be answered
             # unknown_challenge; better to refuse the start.
             raise CTFError("empty_catalog", "Import the challenge catalog before starting the event.", 409)
+        # Running again: the time since it stopped is pause, not running time.
+        # Paused to finished keeps the moment it stopped.
         db.execute("""
             UPDATE events SET state = ?,
                 started_at  = CASE WHEN ? = 'running' AND started_at IS NULL THEN ? ELSE started_at END,
-                finished_at = CASE WHEN ? = 'finished' THEN ? ELSE NULL END
-            WHERE id = ?""", (state, state, ts, state, ts, event_id))
+                finished_at = CASE WHEN ? = 'finished' THEN ? ELSE NULL END,
+                paused_seconds = paused_seconds + CASE WHEN ? = 'running' AND stopped_at IS NOT NULL
+                                                       THEN MAX(0, ? - stopped_at) ELSE 0 END,
+                stopped_at  = CASE WHEN ? = 'running' THEN NULL ELSE COALESCE(stopped_at, ?) END
+            WHERE id = ?""", (state, state, ts, state, ts, state, ts, state, ts, event_id))
 
 
 def update_event_settings(db, event_id, name, scoreboard_public, allow_team_registration,
@@ -226,7 +231,7 @@ def parse_ctf_config(raw):
             if not isinstance(chall, dict):
                 raise CTFError("invalid_catalog", f"Category '{cat_key}' contains a non-object challenge.")
             key = str(chall.get("id", ""))
-            if not CHALLENGE_KEY_RE.match(key):
+            if not CHALLENGE_KEY_RE.fullmatch(key):
                 raise CTFError("invalid_catalog", f"Challenge id '{key}' is not valid.")
             if key in seen:
                 raise CTFError("invalid_catalog", f"Challenge id '{key}' appears twice.")
@@ -317,7 +322,7 @@ def update_challenge(db, event_id, challenge_id, points, enabled):
 
 def _validate_team_name(name):
     name = unicodedata.normalize("NFC", " ".join(name.split()))
-    if not TEAM_NAME_RE.match(name):
+    if not TEAM_NAME_RE.fullmatch(name):
         raise CTFError("invalid_team_name",
                        "Team name must be 2-40 characters: letters, digits, spaces and . - ' ! ? ( ) + # & @")
     return name
@@ -330,6 +335,11 @@ _HOMOGLYPHS = str.maketrans({
     "т": "t", "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "ɡ": "g", "ӏ": "l",
     "α": "a", "β": "b", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t",
     "υ": "u", "χ": "x", "ω": "w", "0": "o", "1": "l", "|": "l",
+    # Latin letters TEAM_NAME_RE allows that do not decompose into a base
+    # letter and an accent ("Admın" with a dotless ı). The middle dot and
+    # apostrophe are what NFKD leaves of ŀ and ŉ.
+    "ı": "i", "ø": "o", "ł": "l", "đ": "d", "ð": "d", "ħ": "h", "ĸ": "k", "ŧ": "t", "ŋ": "n",
+    "þ": "p", "æ": "ae", "œ": "oe", "·": "", "ʼ": "",
 })
 
 
@@ -503,9 +513,13 @@ def participation(db, device_id):
         ORDER BY i.joined_at DESC LIMIT 1""", (device_id,)).fetchone()
 
 
-def leave(db, device_id):
-    """The device leaves its event."""
-    db.execute("UPDATE instances SET revoked = 1 WHERE device_id = ? AND revoked = 0", (device_id,))
+def leave(db, device_id, instance_id=None):
+    """The device leaves its event; with instance_id, only if that is the instance it is in."""
+    if instance_id is None:
+        db.execute("UPDATE instances SET revoked = 1 WHERE device_id = ? AND revoked = 0", (device_id,))
+    else:
+        db.execute("UPDATE instances SET revoked = 1 WHERE device_id = ? AND id = ? AND revoked = 0",
+                   (device_id, instance_id))
 
 
 def revoke_instance(db, instance_id):

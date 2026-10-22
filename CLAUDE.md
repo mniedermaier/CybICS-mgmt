@@ -55,7 +55,7 @@ Never stage `server/data/`, `*.sqlite`, `.env` or anything holding a real admin 
     `MGMT_HOST_DIR`; the image's root service `cybics-mgmt-host` applies them.
   - `db.py`: SQLite and migrations.
   - `views.py`: template filters, error pages and security headers.
-  - `cli.py`: `flask --app cybics_mgmt ...` commands (backup, login-link).
+  - `cli.py`: `flask --app cybics_mgmt ...` commands (backup, login-link, new-signing-key).
   - `ctf/`: the CTF part. Its modules attach routes and commands to the shared blueprints and CLI, so
     endpoint names stay `api.*`, `admin.*` and `public.*`.
     - `logic.py`: all CTF domain logic (events, catalog, teams, instances, solves, scoring). It has
@@ -141,7 +141,9 @@ same way: `docker run --rm -v "$PWD:/src" python:3.12-alpine sh -c 'cd /src && r
   is off after enrolment. It never raises into landing. Keep the signature check in plain standard
   library (`verify_signature`), and never parse the decrypted padding.
 - **The signing key is never replaced silently.** Every enrolled device pinned it; an unreadable
-  key file stops jobs with an error instead.
+  key file, or a missing one while devices are enrolled, stops jobs and enrolments with an error
+  instead (`signing.KeyUnavailable`), never heartbeats or solves. Only `flask ... new-signing-key`
+  replaces it, and `backup` copies it.
 - **The API is a contract with CybICS releases.** `/api/v1` is the contract with every CybICS
   release from the one that replaces v1.2.4 on. Changes under `/api/v1` may only *add* fields or
   endpoints. Renaming, removing or changing the meaning of anything needs `/api/v2`, served
@@ -192,7 +194,12 @@ same way: `docker run --rm -v "$PWD:/src" python:3.12-alpine sh -c 'cd /src && r
   and a change ends every other session.
 - **The server never acts on its host by itself.** On the Raspberry Pi image it may only drop a
   request into `MGMT_HOST_DIR` (a tmpfs); `cybics-mgmt-host` accepts nothing but a new password for
-  `pi`, deletes the request first and reports in `status.json`. The containers stay unprivileged.
+  `pi`, moves the request out of the server's reach first and reports in `status.json`. That
+  directory belongs to the container, so the root service follows no symlink in it, reads only
+  regular files and keeps its own state in `/run/cybics-mgmt-host`. The containers stay
+  unprivileged.
+- **SSH on the Pi image is off while `pi` has the published password.** `cybics-mgmt-host` switches
+  it on once the password was changed; the access point's Wi-Fi password is public.
 - **Slow hashing stays outside the write lock, and never queues for long.** Team passwords are
   hashed and checked before `transaction()`, through `security.hash_password`/`verify_password`.
   Those wait at most `HASH_WAIT` for one of two slots, then raise `HashingBusy` (503). Cheap refusals

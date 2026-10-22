@@ -164,6 +164,48 @@ def test_leaving_the_event_keeps_the_device(client, enrolled):
     assert client.get("/api/v1/challenges", headers=auth(enrolled["token"])).status_code == 409
 
 
+def test_leaving_by_instance_id_only_leaves_that_instance(client, enrolled):
+    """A client retrying an old leave must not end the instance the organiser created meanwhile."""
+    token = enrolled["token"]
+    resp = client.delete("/api/v1/ctf/join", headers=auth(token), json={"instance_id": "an-older-one"})
+    assert resp.status_code == 204
+    hb = client.post("/api/v1/heartbeat", headers=auth(token), json={}).get_json()["ctf"]
+    assert hb["instance_id"] == enrolled["instance_id"]
+    resp = client.delete("/api/v1/ctf/join", headers=auth(token), json={"instance_id": enrolled["instance_id"]})
+    assert resp.status_code == 204
+    assert client.post("/api/v1/heartbeat", headers=auth(token), json={}).get_json()["ctf"] is None
+
+
+@pytest.mark.parametrize("body", ["not json", "[1]", '{"instance_id": 7}', '{"instance_id": "\\ud800"}'])
+def test_leaving_with_an_odd_body_leaves_the_event(client, enrolled, body):
+    resp = client.delete("/api/v1/ctf/join", headers=auth(enrolled["token"]), data=body,
+                         content_type="application/json")
+    assert resp.status_code == 204
+    assert client.post("/api/v1/heartbeat", headers=auth(enrolled["token"]), json={}).get_json()["ctf"] is None
+
+
+def test_the_running_time_leaves_out_pauses(app, event, monkeypatch):
+    clock = [event["started_at"]]
+    monkeypatch.setattr(ctf, "now", lambda: clock[0])
+    with app.app_context():
+        db = get_db()
+        for step, state in ((100, "paused"), (50, "running"), (30, "finished"), (20, "running"), (10, "paused"),
+                            (5, "finished")):
+            clock[0] += step
+            ctf.set_event_state(db, event["id"], state)
+        row = ctf.get_event(db, event["id"])
+    # Ran 100 + 30 + 10 seconds; stood still 50 + 20; the last pause and the finish count from 10 s before.
+    assert row["paused_seconds"] == 70
+    assert row["stopped_at"] - row["started_at"] - row["paused_seconds"] == 140
+
+
+def test_the_scoreboard_api_carries_the_pause_time(client, app, event):
+    with app.app_context():
+        ctf.set_event_state(get_db(), event["id"], "paused")
+    data = client.get(f"/api/v1/events/{event['slug']}/scoreboard").get_json()["event"]
+    assert data["stopped_at"] is not None and data["paused_seconds"] == 0
+
+
 def test_disconnecting_retires_the_device(client, enrolled):
     assert client.delete("/api/v1/device", headers=auth(enrolled["token"])).status_code == 204
     assert client.post("/api/v1/heartbeat", headers=auth(enrolled["token"]), json={}).status_code == 401

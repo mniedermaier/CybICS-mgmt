@@ -11,7 +11,11 @@ FIRST_USER_PASS="raspberry"
 # CybICS image, and without a usable account nothing can be administered.
 # The README and the release notes say to change the password.
 DISABLE_FIRST_BOOT_USER_RENAME=1
-ENABLE_SSH="1"
+# SSH stays off while pi has the published password: anybody on the access
+# point (its Wi-Fi password is public too) could log in and sudo. The root
+# service cybics-mgmt-host switches it on once the password was changed,
+# from the admin UI or on the console (it checks at every boot).
+ENABLE_SSH="0"
 LOCALE_DEFAULT="en_US.UTF-8"
 KEYBOARD_KEYMAP="us"
 KEYBOARD_LAYOUT="English (US)"

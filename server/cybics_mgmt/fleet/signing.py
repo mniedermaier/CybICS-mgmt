@@ -9,6 +9,9 @@ network nor anybody who can only talk to the device can make it run one.
 The key lives in the data volume and is created on first use, not at start:
 most installations never create a job. A key that exists but cannot be read
 is an error, never silently replaced: every enrolled device has pinned it.
+A missing key is created only while no device is enrolled; after that it has
+to come back from a backup, or be replaced on purpose (`flask --app
+cybics_mgmt new-signing-key`).
 """
 import hashlib
 import json
@@ -18,6 +21,8 @@ import threading
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+from ..db import connect
 
 KEY_FILE = "fleet_signing_key.pem"
 KEY_BITS = 3072
@@ -57,11 +62,15 @@ def _load(pem):
     return key
 
 
-def load_or_create(data_dir):
+class KeyUnavailable(RuntimeError):
+    """The key cannot be read, or is missing while devices have pinned it."""
+
+
+def load_or_create(data_dir, may_create=lambda: True):
     """
-    The key from the data volume, created on first use. Appears atomically with
-    its full content (temporary file, fsync, hard link), so two processes
-    starting together end up with the same key.
+    The key from the data volume, created on first use if may_create() says
+    so. Appears atomically with its full content (temporary file, fsync, hard
+    link), so two processes starting together end up with the same key.
     """
     path = os.path.join(data_dir, KEY_FILE)
     while True:
@@ -73,9 +82,13 @@ def load_or_create(data_dir):
         if pem is not None:
             try:
                 return _load(pem)
-            except ValueError as exc:
-                raise RuntimeError(f"{path} cannot be read ({exc}). Restore it from a backup; replacing "
-                                   "it means re-enrolling every device.") from None
+            except (ValueError, RuntimeError) as exc:
+                raise KeyUnavailable(f"{path} cannot be read ({exc}). Restore it from a backup; replacing "
+                                     "it means re-enrolling every device.") from None
+        if not may_create():
+            raise KeyUnavailable(f"{path} is missing, but devices have pinned the key it held. Restore it "
+                                 "from a backup, or replace it with `flask --app cybics_mgmt new-signing-key` "
+                                 "and enrol every device again.")
         key = rsa.generate_private_key(public_exponent=PUBLIC_EXPONENT, key_size=KEY_BITS)
         pem = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                 serialization.NoEncryption())
@@ -94,12 +107,40 @@ def load_or_create(data_dir):
             os.unlink(tmp)
 
 
+def _no_devices(app):
+    """True while no device could have pinned a key (retired ones refuse jobs anyway)."""
+    conn = connect(app.config["DATABASE"])
+    try:
+        return conn.execute("SELECT 1 FROM devices WHERE retired = 0 LIMIT 1").fetchone() is None
+    finally:
+        conn.close()
+
+
 def get_signer(app):
-    """The app's Signer. Tests pass a PEM in FLEET_SIGNING_KEY instead of generating one each."""
+    """
+    The app's Signer, or KeyUnavailable. Tests pass a PEM in
+    FLEET_SIGNING_KEY instead of generating one each.
+    """
     with _lock:
         signer = app.extensions.get("fleet_signer")
         if signer is None:
             pem = app.config.get("FLEET_SIGNING_KEY")
-            key = _load(pem) if pem else load_or_create(app.config["DATA_DIR"])
+            key = _load(pem) if pem else load_or_create(app.config["DATA_DIR"], lambda: _no_devices(app))
             signer = app.extensions["fleet_signer"] = Signer(key)
+        return signer
+
+
+def replace_key(app):
+    """
+    A new key in place of the old one, missing or not: every device pinned
+    the old one and refuses jobs until it is enrolled again. Returns the new
+    Signer.
+    """
+    path = os.path.join(app.config["DATA_DIR"], KEY_FILE)
+    with _lock:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        signer = app.extensions["fleet_signer"] = Signer(load_or_create(app.config["DATA_DIR"]))
         return signer

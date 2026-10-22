@@ -80,7 +80,7 @@ def allowed_actions(device):
 def record_management(db, device_id, management):
     """What the device reported about its management: allowed actions, pinned key, client version."""
     if not isinstance(management, dict):
-        return
+        management = {}   # nothing reported: nothing allowed, no key pinned
     allowed = management.get("allowed")
     allowed = sorted({a for a in allowed if isinstance(a, str) and a in ACTIONS}) if isinstance(allowed, list) else []
     fingerprint = management.get("key_fingerprint")
@@ -167,7 +167,8 @@ def record_results(db, device_id, results):
     if not isinstance(results, list):
         return finished
     for result in results[:50]:
-        if not isinstance(result, dict) or not isinstance(result.get("id"), str):
+        if (not isinstance(result, dict) or not isinstance(result.get("id"), str)
+                or not device_input.encodable(result["id"])):
             continue
         state = result.get("state") if result.get("state") in FINISHED else "failed"
         detail = device_input.opt_str(result.get("detail"), DETAIL_MAX)

@@ -21,7 +21,8 @@
     <div class="meta">
       <span class="live {{ 'is-live' if event.state == 'running' }}" id="live"><span class="dot"></span><span id="state">{{ event.state }}</span></span>
       <span class="clock" id="elapsed" data-started="{{ event.started_at or '' }}"
-            data-finished="{{ event.finished_at or '' }}">--:--:--</span>
+            data-finished="{{ event.finished_at or '' }}" data-stopped="{{ event.stopped_at or '' }}"
+            data-paused="{{ event.paused_seconds or 0 }}">--:--:--</span>
       <span class="updated">updated <span id="updated">now</span></span>
     </div>
     <span id="board-status" class="sr-only" role="status"></span>

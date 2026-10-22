@@ -8,7 +8,7 @@
 # about 10 GB of free disk space, the pi-gen submodule
 # (git submodule update --init image/pi-gen).
 #
-# Usage: image/build.sh            output: image/deploy/*-CybICS-mgmt.img.xz
+# Usage: image/build.sh            output: image/deploy/<date>-CybICS-mgmt-v<version>.img.xz
 #
 set -euo pipefail
 

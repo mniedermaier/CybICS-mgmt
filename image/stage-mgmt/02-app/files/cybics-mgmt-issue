@@ -8,8 +8,9 @@ import os
 import re
 
 AP_PROFILE = "/etc/NetworkManager/system-connections/cybics-mgmt-ap.nmconnection"
-PROBLEMS_FILE = "/run/cybics-mgmt/config-problems"
-HOST_STATUS = "/run/cybics-mgmt/status.json"
+# Root's copies (see cybics-mgmt-host): the server's directory is not trusted here.
+PROBLEMS_FILE = "/run/cybics-mgmt-host/config-problems"
+HOST_STATUS = "/run/cybics-mgmt-host/status.json"
 ISSUE = "/etc/issue.d/cybics-mgmt.issue"
 
 

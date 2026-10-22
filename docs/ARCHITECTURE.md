@@ -251,9 +251,11 @@ path and to make dishonest play visible:
   - the admin login has a way in that no participant can block: a one-time login link from the
     server's command line;
   - the public scoreboard is cached, not limited;
-  - nginx has no per-address connection cap at all. It drops half-sent headers and stalled bodies
-    after 5 s, keeps API bodies at 64 KB, and holds tens of thousands of connections in a fixed two
-    workers within its memory limit. One participant holding a thousand slow uploads open does not
+  - nginx has no per-address connection cap at all. It drops half-sent headers after 5 s and a body
+    that stalls for 5 s between two reads, keeps bodies at 64 KB (only the organiser's catalog
+    upload may be 1 MB), buffers larger ones in a 64 MB tmpfs, and holds tens of thousands of
+    connections in a fixed two workers within its memory limit. A body trickled in byte by byte
+    is not dropped, but it costs only nginx. One participant holding a thousand slow uploads open does not
     slow down anybody's heartbeats, not even from the same address; `tools/slowloris_check.py`
     measures exactly that;
   - the only per-address rule in nginx queues enrolments and joins (8 per second, short burst
@@ -304,7 +306,7 @@ automatically. The UID identifies a board; it does not authenticate one.
 
 - **Server**: `docker compose up -d` starts nginx in front of gunicorn, with one volume (`/data`:
   database, secret key; the admin password is set at the first visit and stored as a hash).
-  - nginx reads each request completely, with 5 s timeouts, before gunicorn sees it. Slow or idle
+  - nginx reads each request completely, with 5 s timeouts between reads, before gunicorn sees it. Slow or idle
     connections cost only nginx, so they cannot starve gunicorn's thread pool;
     `tools/slowloris_check.py` checks this in CI.
   - Only nginx publishes a port. gunicorn accepts forwarded headers from nginx's fixed address alone.

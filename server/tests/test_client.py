@@ -10,6 +10,7 @@ from werkzeug.serving import make_server
 from conftest import FLAGS
 from cybics_mgmt.ctf import logic as ctf
 from cybics_mgmt.db import get_db
+from cybics_mgmt.fleet import logic as fleet
 from cybics_mgmt_client import MgmtClient, MgmtClientError
 
 
@@ -608,3 +609,109 @@ def test_wrong_catalog_is_recoverable(server, event, tmp_path, app):
     client.sync_once()
     with app.app_context():
         assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 100
+
+
+def test_a_leave_that_did_not_get_through_is_retried(server, event, tmp_path, app):
+    """The next heartbeat must not quietly put the user back into the team they left."""
+    landing = Landing()
+    client = landing.client(tmp_path / "s.json")
+    connect(client, server, event["join_code"], "Red Team", "secret-12")
+    client.sync_once()
+    client.state["server_url"] = "http://127.0.0.1:1"   # DELETE /ctf/join cannot reach the server
+    client.leave_event()
+    client.state["server_url"] = server
+    with app.app_context():
+        assert ctf.participation(get_db(), client.state["device_id"]) is not None   # the server missed it
+    landing.solve(client, "physical_process")                                     # not for that team
+    assert client.sync_once()
+    assert client.state["ctf"]["joined"] is False and client.state["ctf"]["removed"] is False
+    with app.app_context():
+        assert ctf.participation(get_db(), client.state["device_id"]) is None     # the retry got through
+    assert client.state["ctf"]["leaving"] is None
+    client.sync_once()
+    assert client.state["ctf"]["joined"] is False
+
+
+def test_a_retried_leave_never_ends_a_newer_instance(server, event, tmp_path, app):
+    """The organiser put the device into a team before the retry got through: that instance stays."""
+    client = Landing().client(tmp_path / "s.json")
+    connect(client, server, event["join_code"], "Red Team", "secret-12")
+    client.state["server_url"] = "http://127.0.0.1:1"
+    client.leave_event()
+    client.state["server_url"] = server
+    with app.app_context():
+        db = get_db()
+        team = ctf.create_team(db, event["id"], "Blue Team", "secret-34")
+        newer, *_ = ctf.assign(db, fleet.get_device(db, client.state["device_id"]), team["id"])
+    client._send_leave(client.state["token"])   # the stale retry names the old instance
+    assert client.state["ctf"]["leaving"] is None
+    with app.app_context():
+        assert ctf.participation(get_db(), client.state["device_id"])["instance_id"] == newer
+    client.sync_once()
+    assert client.state["ctf"]["joined"] is True and client.state["ctf"]["instance_id"] == newer
+
+
+def test_a_heartbeat_answer_from_before_a_leave_is_ignored(server, event, tmp_path, monkeypatch):
+    """A user's leave must not turn into an organiser removal (or be undone) by an answer in flight."""
+    client = Landing().client(tmp_path / "s.json")
+    connect(client, server, event["join_code"], "Red Team", "secret-12")
+    client.sync_once()
+    original, done = client._request, []
+
+    def leave_meanwhile(method, path, **kw):
+        answer = original(method, path, **kw)
+        if path == "/heartbeat" and not done:
+            done.append(1)
+            client.leave_event()   # the user clicks "Leave" while the answer is on its way
+        return answer
+    monkeypatch.setattr(client, "_request", leave_meanwhile)
+    client._heartbeat()
+    assert client.state["ctf"]["joined"] is False
+    client._heartbeat()
+    assert client.state["ctf"]["joined"] is False and client.state["ctf"]["removed"] is False
+
+
+def test_a_heartbeat_answer_from_before_a_join_is_ignored(server, event, tmp_path, monkeypatch):
+    client = Landing().client(tmp_path / "s.json")
+    client.enroll(server, event["join_code"])
+    original, done = client._request, []
+
+    def join_meanwhile(method, path, **kw):
+        answer = original(method, path, **kw)
+        if path == "/heartbeat" and not done:
+            done.append(1)
+            client.join_event(event["join_code"], "Red Team", "secret-12")
+        return answer
+    monkeypatch.setattr(client, "_request", join_meanwhile)
+    client._heartbeat()   # says "ctf": null, computed before the join
+    assert client.state["ctf"]["joined"] is True and client.state["ctf"]["removed"] is False
+
+
+def test_solves_are_sent_when_the_heartbeat_fails_on_the_server(server, event, tmp_path, app, monkeypatch):
+    landing = Landing()
+    client = landing.client(tmp_path / "s.json")
+    connect(client, server, event["join_code"], "Red Team", "secret-12")
+    landing.solve(client, "physical_process")
+    original = client._request
+
+    def broken_heartbeat(method, path, **kw):
+        if path == "/heartbeat":
+            raise MgmtClientError("http_500", "boom", 500)
+        return original(method, path, **kw)
+    monkeypatch.setattr(client, "_request", broken_heartbeat)
+    assert client.sync_once() is False
+    assert client.snapshot()["ctf"]["pending"] == 0
+    with app.app_context():
+        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 100
+
+
+def test_connecting_again_retires_the_old_device(server, event, tmp_path, app):
+    client = Landing().client(tmp_path / "s.json")
+    connect(client, server, event["join_code"], "Red Team", "secret-12")
+    old = client.state["device_id"]
+    client.enroll(server, event["join_code"])
+    assert client.state["device_id"] != old
+    with app.app_context():
+        db = get_db()
+        assert db.execute("SELECT retired FROM devices WHERE id = ?", (old,)).fetchone()[0] == 1
+        assert ctf.participation(db, old) is None

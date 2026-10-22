@@ -16,11 +16,15 @@ import sys
 BOOT_FILE = "/boot/firmware/cybics-mgmt.txt"
 AP_PROFILE = "/etc/NetworkManager/system-connections/cybics-mgmt-ap.nmconnection"
 ENV_FILE = "/opt/cybics-mgmt/.env"
-PROBLEMS_FILE = "/run/cybics-mgmt/config-problems"   # the tmpfs request directory, see cybics-mgmt-host
+# Root's own tmpfs directory (see cybics-mgmt-host), not the one the server can write to.
+PROBLEMS_FILE = "/run/cybics-mgmt-host/config-problems"
 
 CHECKS = {
-    "WIFI_SSID": (lambda v: 1 <= len(v.encode()) <= 32 and v.isprintable(), "1 to 32 characters"),
-    "WIFI_PASSWORD": (lambda v: re.fullmatch(r"[\x20-\x7e]{8,63}", v), "8 to 63 printable ASCII characters"),
+    # NetworkManager keyfiles treat a backslash as an escape, so none is allowed.
+    "WIFI_SSID": (lambda v: 1 <= len(v.encode()) <= 32 and v.isprintable() and "\\" not in v,
+                  "1 to 32 characters without a backslash"),
+    "WIFI_PASSWORD": (lambda v: re.fullmatch(r"[\x20-\x5b\x5d-\x7e]{8,63}", v),
+                      "8 to 63 printable ASCII characters without a backslash"),
     "WIFI_COUNTRY": (lambda v: re.fullmatch(r"[A-Z]{2}", v), "a two-letter country code"),
     "DEFAULT_ENROL_CODE": (lambda v: v == "" or re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,15}", v),
                            "empty, or 4 to 16 letters, digits or dashes"),
@@ -89,6 +93,8 @@ def write_env(settings):
     lines = [
         "# Written by cybics-mgmt-config from /boot/firmware/cybics-mgmt.txt at every boot.",
         "MGMT_PORT=80",
+        # The access point's address, for the links `flask ... login-link` prints.
+        "MGMT_PUBLIC_URL=http://10.42.0.1",
         f"MGMT_SERVER_NAME='{settings['SERVER_NAME']}'",
         f"MGMT_DEFAULT_ENROL_CODE='{settings['DEFAULT_ENROL_CODE']}'",
     ]
@@ -105,7 +111,7 @@ def main():
     replace_lines(AP_PROFILE, {"ssid": settings["WIFI_SSID"], "psk": settings["WIFI_PASSWORD"]})
     set_country(settings["WIFI_COUNTRY"], problems)
     write_env(settings)
-    os.makedirs(os.path.dirname(PROBLEMS_FILE), exist_ok=True)
+    os.makedirs(os.path.dirname(PROBLEMS_FILE), mode=0o700, exist_ok=True)
     with open(PROBLEMS_FILE, "w", encoding="utf-8") as f:
         f.write("".join(p + "\n" for p in problems))
     for problem in problems:

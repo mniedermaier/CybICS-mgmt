@@ -231,6 +231,16 @@ MIGRATIONS = [
         set_at        REAL    NOT NULL
     );
     """,
+    # 3: the time an event did not run, so the scoreboard clock shows running
+    # time only. stopped_at is when it last stopped running (pause or
+    # finish), NULL while it runs; paused_seconds adds up every stop it came
+    # back from. An event paused before this migration has no stopped_at and
+    # adds nothing when it resumes.
+    """
+    ALTER TABLE events ADD COLUMN stopped_at REAL;
+    ALTER TABLE events ADD COLUMN paused_seconds REAL NOT NULL DEFAULT 0;
+    UPDATE events SET stopped_at = finished_at WHERE state = 'finished';
+    """,
 ]
 
 
