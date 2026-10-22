@@ -261,19 +261,24 @@ Per-instance flags would be a CybICS-wide change and are discussed in `docs/ARCH
 
 ## UI and branding
 
-- The look follows the CybICS landing page (`software/landing/templates/index.html` in CybICS):
+- The look follows the CybICS brand guide (`doc/brand/README.md` in CybICS) and its landing page
+  (`software/landing/templates/index.html`):
   - dark slate is the default when the OS states no preference; otherwise the theme follows the OS;
-  - CybICS orange `#ff6b00` is the only accent;
+  - CybICS orange `#ff6b00` is the only accent. Text on orange fills is ink `#1a1a1a` in both
+    themes, never white (2.9:1);
+  - status colours are the brand's green `#22c55e`, amber `#ffb300` and red `#ef4444`, with darker
+    steps for text in light mode;
   - a faint blueprint grid sits behind the content;
-  - text is set in Inter, numbers in a mono face.
+  - text is set in Inter, numbers in a mono face; the pixel style is for the logo only.
 - The tokens are defined once on `:root` and overridden under `:root[data-theme="light"]`. Use
   `var(--...)` everywhere and never hard-code a colour in a rule.
-- In light mode, orange text uses `--accent-text`, because `#ff6b00` fails contrast on white.
+- In light mode, orange text uses `--accent-text` (`#b34700`, the brand's accent text on light),
+  because `#ff6b00` fails contrast on white.
 - `static/theme.js` runs synchronously in `<head>` and sets `data-theme` before first paint. The
   preference is `system`, `light` or `dark`, kept in `localStorage` under `cybics-mgmt-theme`.
 - Brand assets are copies from CybICS. Replace them from there; do not edit them:
-  - `static/img/cybics-logo.png` comes from `software/landing/pics/CybICS_logo.png`;
-  - `static/img/favicon.ico` comes from `software/landing/pics/favicon.ico`;
+  - `static/img/cybics-wordmark.svg`, `cybics-mark.svg`, `favicon.ico` and `apple-touch-icon.png`
+    come from `software/landing/pics/`; `docs/pics/cybics-wordmark.svg` comes from `doc/brand/`;
   - `static/fonts/InterVariable.woff2` comes from `software/landing/static/fonts/` (SIL OFL; keep
     `Inter-LICENSE.txt` next to it).
 - The scoreboard is projected in rooms. Keep it legible from a distance, and keep it refreshing

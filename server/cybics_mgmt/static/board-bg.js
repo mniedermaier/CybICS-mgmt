@@ -26,7 +26,7 @@
   function readColors() {
     const light = document.documentElement.dataset.theme === "light";
     colors = light
-      ? { node: "rgba(194, 65, 12, 0.55)", hub: "rgba(194, 65, 12, 0.85)", link: "194, 65, 12", packet: "#c2410c" }
+      ? { node: "rgba(179, 71, 0, 0.55)", hub: "rgba(179, 71, 0, 0.85)", link: "179, 71, 0", packet: "#b34700" }
       : { node: "rgba(255, 140, 66, 0.55)", hub: "rgba(255, 165, 0, 0.9)", link: "255, 120, 30", packet: "#ffb347" };
     sprite = makeSprite(colors.packet);
   }

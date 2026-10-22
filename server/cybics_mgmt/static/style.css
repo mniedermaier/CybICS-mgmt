@@ -1,6 +1,6 @@
 /* CybICS-mgmt styles.
-   The tokens follow the CybICS landing page (software/landing/templates/index.html)
-   so the server reads as part of the same product: dark slate by default, the
+   The tokens follow the CybICS brand guide (doc/brand/README.md in CybICS) and
+   its landing page, so the server reads as part of the same product: dark slate by default, the
    CybICS orange as the only accent, a faint blueprint grid behind everything.
    Dark is the default; [data-theme="light"] (set by theme.js) overrides the
    same names, so every rule below themes itself through var(). */
@@ -28,22 +28,23 @@
 
   --accent: #ff6b00;
   --accent-hover: #ff8c42;
-  --button-bg: #ff6b00;          /* dark text on it: 7:1 */
+  --button-bg: #ff6b00;          /* ink text on it: 6.1:1 */
   --button-hover: #ff8c42;
   --accent-soft: rgba(255, 107, 0, 0.14);
   --accent-line: rgba(255, 107, 0, 0.38);
-  --on-accent: #1a1206;
+  --on-accent: #1a1a1a;          /* the brand's ink */
 
-  --ok: #3ddc71;
-  --warn: #ffb020;
-  --bad: #ff5c5c;
+  /* The brand's status colours; light mode uses darker steps for text. */
+  --ok: #22c55e;
+  --warn: #ffb300;
+  --bad: #ef4444;
   --gold: #ffc53d;
   --silver: #b8c0cc;
   --bronze: #d08a4c;
 
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
   --font: "InterVariable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 :root[data-theme="light"] {
@@ -59,16 +60,15 @@
   --heading: #14171d;
   --muted: #545d6b;
 
-  /* The brand orange is too light for text on white; links and outlines use
-     a darker step of the same hue, filled buttons keep the brand colour. */
-  --accent-text: #c2410c;
-  /* White on the brand orange is only 2.9:1; filled buttons use a darker
-     step of the same hue in light mode (white on #c2410c is 5.2:1). */
-  --button-bg: #c2410c;
-  --button-hover: #9a3412;
+  /* The brand orange is too light for text on white; links and accent text
+     use the brand's "accent text on light" (5.5:1). Filled buttons keep the
+     brand orange with ink text (6.1:1), as in CybICS. */
+  --accent-text: #b34700;
+  --button-bg: #ff6b00;
+  --button-hover: #ff8c42;
   --accent-soft: rgba(255, 107, 0, 0.1);
   --accent-line: rgba(255, 107, 0, 0.45);
-  --on-accent: #ffffff;
+  --on-accent: #1a1a1a;
 
   --ok: #15803d;
   --warn: #a15c00;
