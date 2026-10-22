@@ -1,0 +1,33 @@
+[Unit]
+Description=CybICS-mgmt: the current scoreboard on HDMI
+Documentation=file:///boot/firmware/cybics-mgmt.txt
+# cybics-mgmt-config decides, from HDMI_SCOREBOARD in cybics-mgmt.txt.
+ConditionPathExists=/run/cybics-mgmt-kiosk
+After=cybics-mgmt-config.service cybics-mgmt.service systemd-user-sessions.service
+Wants=dbus.socket systemd-logind.service
+After=dbus.socket systemd-logind.service
+# The kiosk takes tty1; the console login stays on tty2 (Ctrl+Alt+F2).
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+Type=simple
+User=cybics-kiosk
+PAMName=cybics-mgmt-kiosk
+WorkingDirectory=~
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+ExecStart=/usr/local/bin/cybics-mgmt-kiosk
+# A crash or an unplugged screen brings it back.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

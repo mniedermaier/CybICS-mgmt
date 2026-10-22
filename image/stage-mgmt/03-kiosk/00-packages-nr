@@ -1,0 +1,6 @@
+# The current scoreboard on the HDMI output: cage is a Wayland compositor
+# that runs one application full screen; no desktop. Without recommends to
+# keep the image small.
+cage
+chromium
+fonts-dejavu-core

@@ -237,6 +237,13 @@ def public_board(db, event):
     return data
 
 
+@bp.get("/scoreboard/current")
+def current_scoreboard():
+    """Which event /scoreboard shows right now: {"slug": ...}, or {"slug": null} while none."""
+    event = ctf.current_public_event(get_db())
+    return jsonify({"slug": event["slug"] if event else None})
+
+
 @bp.get("/events/<slug>/scoreboard")
 def event_scoreboard(slug):
     db = get_db()

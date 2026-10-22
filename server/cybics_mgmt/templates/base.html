@@ -30,7 +30,7 @@
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <button class="secondary" type="submit">Log out</button>
     </form>
-    {% elif request.endpoint not in ('admin.login', 'admin.setup', 'public.scoreboard') %}
+    {% elif request.endpoint not in ('admin.login', 'admin.setup', 'public.scoreboard', 'public.scoreboard_current') %}
     <a href="{{ url_for('admin.login') }}">Organiser login</a>
     {% endif %}
   </div>

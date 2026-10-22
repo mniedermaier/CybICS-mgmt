@@ -236,6 +236,63 @@ def test_challenges_endpoint_never_exposes_flags(client, enrolled):
         assert flag not in json.dumps(data)
 
 
+def _new_event(db, slug, state=None, public=True):
+    event = ctf.create_event(db, slug, slug.title())
+    ctf.import_catalog(db, event["id"], json.dumps(CATALOG))
+    if not public:
+        ctf.update_event_settings(db, event["id"], event["name"], False, True)
+    for step in {"running": ["running"], "paused": ["running", "paused"],
+                 "finished": ["running", "finished"]}.get(state, []):
+        ctf.set_event_state(db, event["id"], step)
+    return event
+
+
+def test_the_current_scoreboard_prefers_running_then_paused_then_the_last_finished(client, app, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(ctf, "now", lambda: clock[0])
+
+    def current():
+        return client.get("/api/v1/scoreboard/current").get_json()["slug"]
+    assert current() is None
+    with app.app_context():
+        db = get_db()
+        _new_event(db, "draft-one")                       # a draft never shows
+        _new_event(db, "secret", "running", public=False)  # nor a private one
+    assert current() is None
+    with app.app_context():
+        _new_event(get_db(), "old", "finished")
+    assert current() == "old"
+    clock[0] += 10
+    with app.app_context():
+        _new_event(get_db(), "newer", "finished")
+    assert current() == "newer"
+    with app.app_context():
+        _new_event(get_db(), "break", "paused")
+    assert current() == "break"
+    clock[0] += 10
+    with app.app_context():
+        _new_event(get_db(), "live", "running")
+    assert current() == "live"
+
+
+def test_the_current_scoreboard_page_follows_or_waits(client, app):
+    page = client.get("/scoreboard")
+    assert page.status_code == 200 and b"appears here as soon as an event starts" in page.data
+    assert b'data-follow="/api/v1/scoreboard/current"' in page.data and b"follow.js" in page.data
+    assert b"Organiser login" not in page.data
+    with app.app_context():
+        _new_event(get_db(), "live", "running")
+    page = client.get("/scoreboard").data
+    assert b'data-scoreboard="/api/v1/events/live/scoreboard"' in page and b'data-slug="live"' in page
+    assert b"follow.js" in page
+    assert b"follow.js" not in client.get("/scoreboard/live").data   # a chosen event stays put
+
+
+def test_the_waiting_page_shows_where_to_join(app, tmp_path):
+    app.config["PUBLIC_URL"] = "http://10.42.0.1"
+    assert b"http://10.42.0.1" in app.test_client().get("/scoreboard").data
+
+
 def test_scoreboard_ranking_and_ties(client, event):
     a = enroll(client, event, team="Alpha").get_json()
     b = enroll(client, event, team="Bravo").get_json()

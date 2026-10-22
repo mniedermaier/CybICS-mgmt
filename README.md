@@ -182,6 +182,8 @@ cybics_mgmt reset-admin-password` lets the next visit set a new one.
 5. **Press Start.** Solves only count while the event is running. *Pause*, *Resume* and *Finish*
    follow, and a finished event can be reopened.
 6. **Put the scoreboard on the projector**: `http://<host>:8000/scoreboard/<slug>`, in full screen.
+   Or `http://<host>:8000/scoreboard`, which always shows the current event: it switches to the next
+   event on its own and shows a waiting page while none has started.
 
 The same from the command line:
 
@@ -210,6 +212,7 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
 | Enrolment code for CybICS boards | `CYBICS-BOARDS` |
 | Console login | `pi` / `raspberry` |
 | SSH | off until the `pi` password is changed, then `pi` with the new password |
+| HDMI | the current scoreboard, full screen, no login (`HDMI_SCOREBOARD=auto`: on with 1 GB of memory or more) |
 
 1. Write the image to an SD card (`xzcat *-CybICS-mgmt-*.img.xz | sudo dd of=/dev/sdX bs=4M
    conv=fsync status=progress`, or Raspberry Pi Imager under "Use custom").
@@ -233,6 +236,15 @@ the CybICS release that replaces v1.2.4.)
 The defaults are public, like the CybICS boards' own. Change the Wi-Fi password and the `pi`
 password before the Pi goes on any network you care about. The access point also forwards to the
 Pi's Ethernet port if it is connected.
+
+**The scoreboard on HDMI.** Connect a screen or a projector to the Pi's HDMI port, and it shows
+`/scoreboard` full screen as soon as the server is up: a waiting page with the address to join until
+an event starts, then the running event, and after the end its final results until the next one
+starts. Nobody has to log in or touch it. It runs as a user of its own (`cybics-kiosk`, no password, no
+shell) in `cage` with Chromium, and takes the first console; the console login is on Ctrl+Alt+F2. In
+`cybics-mgmt.txt`, `HDMI_SCOREBOARD` switches it `on`, `off` or `auto` (the default: on a Pi with 1 GB
+of memory or more, so not on a Pi Zero 2 W, where Chromium next to the server does not fit), and
+`HDMI_THEME` picks `dark` or `light`.
 
 **Commands on the Pi.** The commands under [Operating the Server](#-operating-the-server) run on the
 Pi as well, from `/opt/cybics-mgmt` over SSH or on the console (`pi` may use `sudo`; it is in the

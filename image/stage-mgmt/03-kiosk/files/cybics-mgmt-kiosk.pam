@@ -1,0 +1,6 @@
+# The kiosk's session on tty1 (cybics-mgmt-kiosk.service): no password,
+# but a logind session, so cage gets the seat (display and input).
+auth     required pam_permit.so
+account  required pam_permit.so
+session  required pam_unix.so
+session  required pam_systemd.so

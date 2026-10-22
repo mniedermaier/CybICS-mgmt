@@ -312,6 +312,18 @@ any, ends (`204`). Its history stays. The token stops working; connecting again 
 The organiser can also retire a device. Its token then gets `401 unauthorized` and its instance
 ends. Bringing it back makes the token valid again, but does not rejoin the event.
 
+## `GET /scoreboard/current`
+
+Public. Which event `/scoreboard` shows right now: the public event that runs or is paused (the most
+recently started first), otherwise the one that finished last; never a draft.
+
+```json
+{"slug": "demo"}
+```
+
+`slug` is `null` while there is no such event. The page `/scoreboard`, which the Raspberry Pi image
+shows on its HDMI output, polls this every 15 s and reloads when the answer changes.
+
 ## `GET /events/<slug>/scoreboard`
 
 Public, but only if the event's scoreboard is public and the event is not a draft; otherwise it
