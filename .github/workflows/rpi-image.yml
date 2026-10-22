@@ -8,8 +8,14 @@ on:
   # before a release, not on the release.
   pull_request:
     branches: [ main ]
+    # build.sh also builds the containers and derives the Pi's compose file
+    # from docker-compose.yml.
     paths:
       - 'image/**'
+      - 'docker-compose.yml'
+      - 'proxy/**'
+      - 'server/Dockerfile'
+      - 'server/requirements.txt'
       - '.github/workflows/rpi-image.yml'
   workflow_dispatch:
 
@@ -17,8 +23,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read only by default: pull request builds run pi-gen with nothing to write.
+# Only the release job, on tags, may write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -26,6 +34,10 @@ jobs:
     # Native arm64: pi-gen and the containers build without qemu.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
+    outputs:
+      name: ${{ steps.artefact.outputs.name }}
+      mb: ${{ steps.artefact.outputs.mb }}
+      sha256: ${{ steps.artefact.outputs.sha256 }}
 
     steps:
       - name: Free up disk space
@@ -97,15 +109,35 @@ jobs:
           archive: false
           retention-days: 14
 
+  release:
+    name: Attach to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download the image
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.name }}
+          path: release
+
+      - name: Download its checksum
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.name }}.sha256
+          path: release
+
       - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-          IMG: ${{ steps.artefact.outputs.path }}
-          IMG_NAME: ${{ steps.artefact.outputs.name }}
-          IMG_MB: ${{ steps.artefact.outputs.mb }}
-          IMG_SHA: ${{ steps.artefact.outputs.sha256 }}
+          IMG: release/${{ needs.build.outputs.name }}
+          IMG_NAME: ${{ needs.build.outputs.name }}
+          IMG_MB: ${{ needs.build.outputs.mb }}
+          IMG_SHA: ${{ needs.build.outputs.sha256 }}
         run: |
           set -euo pipefail
           NOTES="$(mktemp)"
@@ -145,7 +177,8 @@ jobs:
           - Web interface: \`http://10.42.0.1\` or \`http://cybics-mgmt.local\`.
           - The first visit to \`http://10.42.0.1/admin\` sets the admin password; do it before
             participants join the network.
-          - SSH: \`pi\` / \`raspberry\`. **Change it** under *Passwords* in the web interface.
+          - The \`pi\` account starts with the password \`raspberry\` on the console. **Change it**
+            under *Passwords* in the web interface; SSH stays off until then.
 
           The first boot loads the containers and takes a few minutes; later boots take seconds.
           NOTE

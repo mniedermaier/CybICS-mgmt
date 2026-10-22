@@ -200,7 +200,7 @@ The containers' root filesystems are read-only, so the catalog is piped in on st
 
 For a classroom without any infrastructure, CybICS-mgmt runs on a Raspberry Pi 3, 4, 5 or Zero 2 W
 that also hosts the Wi-Fi network. Every release has the SD card image attached
-(`*-CybICS-mgmt.img.xz`).
+(`<date>-CybICS-mgmt-v<version>.img.xz`).
 
 | | Default |
 |---|---|
@@ -208,9 +208,10 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
 | Web interface | `http://10.42.0.1` or `http://cybics-mgmt.local` |
 | Admin password | set in the browser at the first visit to `http://10.42.0.1/admin` |
 | Enrolment code for CybICS boards | `CYBICS-BOARDS` |
-| SSH | `pi` / `raspberry` |
+| Console login | `pi` / `raspberry` |
+| SSH | off until the `pi` password is changed, then `pi` with the new password |
 
-1. Write the image to an SD card (`xzcat *-CybICS-mgmt.img.xz | sudo dd of=/dev/sdX bs=4M
+1. Write the image to an SD card (`xzcat *-CybICS-mgmt-*.img.xz | sudo dd of=/dev/sdX bs=4M
    conv=fsync status=progress`, or Raspberry Pi Imager under "Use custom").
 2. Before the first boot, open the card's boot partition on any computer and edit `cybics-mgmt.txt`:
    Wi-Fi name, **password** and **country**, and the boards' enrolment code. It is
@@ -219,7 +220,9 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
 4. Join the Wi-Fi with a laptop and open `http://10.42.0.1/admin`. The first visit sets the admin
    password; do it before participants join the network.
 5. Under *Passwords*, set a new password for the Pi's `pi` account (SSH and console): it starts as
-   `pi` / `raspberry`, and every admin page warns until it is changed.
+   `pi` / `raspberry`, and every admin page warns until it is changed. SSH stays off until then,
+   because anybody on the access point could log in with the published password; it comes on as
+   soon as the new password is set (or at the next boot, if you changed it on the console).
 
 **The default network.** CybICS boards with a USB Wi-Fi dongle look for `cybics-mgmt`. As soon as it
 is in range they connect and enrol with the code `CYBICS-BOARDS`, and show up in the fleet. If you
@@ -230,6 +233,16 @@ the CybICS release that replaces v1.2.4.)
 The defaults are public, like the CybICS boards' own. Change the Wi-Fi password and the `pi`
 password before the Pi goes on any network you care about. The access point also forwards to the
 Pi's Ethernet port if it is connected.
+
+**Commands on the Pi.** The commands under [Operating the Server](#-operating-the-server) run on the
+Pi as well, from `/opt/cybics-mgmt` over SSH or on the console (`pi` may use `sudo`; it is in the
+`docker` group):
+
+```bash
+ssh pi@10.42.0.1
+cd /opt/cybics-mgmt
+docker compose exec server flask --app cybics_mgmt login-link   # a link to http://10.42.0.1/admin/...
+```
 
 Build the image yourself with `image/build.sh` (Docker with buildx; on an x86 host also qemu for
 arm64). The release workflow builds it natively on an arm64 runner.
@@ -296,7 +309,12 @@ docker compose exec server flask --app cybics_mgmt backup /data/backup-$(date +%
 docker compose cp server:/data/backup-<timestamp>.sqlite .
 ```
 
-`backup` uses SQLite's `VACUUM INTO` and is safe while the server runs. Do not copy the database file
+`backup` uses SQLite's `VACUUM INTO` and is safe while the server runs. Next to each backup it writes
+`<backup>.signing-key.pem`, the key that signs fleet jobs. Copy it along and keep it as private as the
+database: every enrolled device pinned that key, and the server refuses to replace a missing one on its
+own. To restore, put both back into `/data` (the key as `fleet_signing_key.pem`). If the key is lost for
+good, `flask --app cybics_mgmt new-signing-key` creates a new one, and every device has to connect
+again before it takes jobs. Do not copy the database file
 directly; it runs in WAL mode. For rolling backups during an event, give `backup` a directory and a
 number of files to keep, from a cron entry on the host:
 
@@ -330,8 +348,12 @@ organiser often share one NAT address, and such a cap would let one participant 
 behind it. On a server reachable from the internet, add a generous cap in the host firewall:
 
 ```bash
-iptables -I DOCKER-USER -p tcp --dport 8000 --syn -m connlimit --connlimit-above 5000 -j REJECT
+iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 8000 --ctdir ORIGINAL --syn \
+    -m connlimit --connlimit-above 5000 -j REJECT
 ```
+
+(`DOCKER-USER` sees the packets after Docker translated them to the container's port 8080, so match
+the original port 8000 through conntrack, not with `--dport`.)
 
 ---
 

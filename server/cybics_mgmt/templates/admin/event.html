@@ -91,7 +91,12 @@
   </div>
   <div class="panel">
     <h2>Delete event</h2>
-    <p class="muted">Removes the event with all teams and solves; the devices stay in the fleet. This cannot be undone.</p>
+    <p class="muted">Removes the event with all teams and solves, and with its audit trail of submissions (wrong
+      flags, wrong team passwords); the devices stay in the fleet, and the organiser log keeps what was done. This
+      cannot be undone. Keep the evidence first:
+      <a href="{{ url_for('admin.export', event_id=event.id, kind='submissions') }}">submissions.csv</a>,
+      <a href="{{ url_for('admin.export', event_id=event.id, kind='solves') }}">solves.csv</a> and
+      <a href="{{ url_for('admin.export', event_id=event.id, kind='log') }}">log.csv</a>.</p>
     <form method="post" action="{{ url_for('admin.event_delete', event_id=event.id) }}" class="row">
       <input type="hidden" name="csrf" value="{{ csrf_token() }}">
       <input type="text" name="confirm" placeholder="type {{ event.slug }}" aria-label="Type {{ event.slug }} to confirm deletion" required>

@@ -282,6 +282,26 @@ def test_deleting_a_team_keeps_its_submissions(tmp_path):
     conn.close()
 
 
+def test_migration_3_keeps_events_and_dates_finished_ones(tmp_path):
+    """An event that finished before the server knew stopped_at gets it from finished_at."""
+    path = str(tmp_path / "db.sqlite")
+    conn = connect(path)
+    for number, script in enumerate(MIGRATIONS[:2], start=1):
+        conn.executescript(f"BEGIN;\n{script}\nPRAGMA user_version = {number};\nCOMMIT;")
+    conn.executescript("""
+        INSERT INTO events (slug, name, join_code, state, started_at, finished_at, created_at)
+            VALUES ('done', 'Done', 'AAA', 'finished', 100, 500, 0),
+                   ('pause', 'Pause', 'BBB', 'paused', 100, NULL, 0);
+    """)
+    conn.close()
+    migrate(path)
+    conn = connect(path)
+    rows = {r["slug"]: r for r in conn.execute("SELECT * FROM events")}
+    assert (rows["done"]["stopped_at"], rows["done"]["paused_seconds"]) == (500, 0)
+    assert (rows["pause"]["stopped_at"], rows["pause"]["paused_seconds"]) == (None, 0)
+    conn.close()
+
+
 def test_backup_command(app, tmp_path, enrolled):
     target = tmp_path / "backup.sqlite"
     result = app.test_cli_runner().invoke(args=["backup", str(target)])
@@ -574,6 +594,46 @@ def test_non_latin_lookalike_letters_are_not_allowed_at_all(client, event, name)
     assert resp.get_json()["error"]["code"] == "invalid_team_name"
 
 
+@pytest.mark.parametrize("taken, name", [("Admin", "Admın"), ("Rot", "Røt"), ("Lost", "Łost"), ("Dog", "Ðog"),
+                                         ("Hello", "Heŀlo"), ("Kiel", "ĸiel"), ("Aerger", "Ærger"),
+                                         ("Path", "Paŧh"), ("Strasse", "Straße")])
+def test_latin_letters_without_an_accent_to_strip_are_caught(client, event, taken, name):
+    enroll(client, event, team=taken)
+    resp = enroll(client, event, team=name)
+    assert resp.status_code == 409, name
+    assert resp.get_json()["error"]["code"] == "team_name_taken"
+
+
+def test_a_challenge_id_with_a_trailing_newline_is_refused():
+    catalog = json.loads(json.dumps(CATALOG))
+    next(iter(catalog["categories"].values()))["challenges"][0]["id"] += "\n"
+    with pytest.raises(ctf.CTFError, match="is not valid"):
+        ctf.parse_ctf_config(json.dumps(catalog))
+
+
+def test_a_challenge_of_another_event_cannot_be_changed(admin, app, event):
+    with app.app_context():
+        db = get_db()
+        other = ctf.create_event(db, "other", "Other")
+        ctf.import_catalog(db, other["id"], json.dumps(CATALOG))
+        foreign = db.execute("SELECT id FROM challenges WHERE event_id = ?", (other["id"],)).fetchone()["id"]
+    resp = admin.post(f"/admin/events/{event['id']}/challenges/{foreign}", data={**CSRF, "points": "1"})
+    assert resp.status_code == 404
+    with app.app_context():
+        assert get_db().execute("SELECT points FROM challenges WHERE id = ?", (foreign,)).fetchone()[0] != 1
+        assert not get_db().execute("SELECT 1 FROM admin_log WHERE action = 'update_challenge'").fetchone()
+
+
+def test_voiding_returns_to_the_filtered_page(admin, client, enrolled, event, app):
+    solve(client, enrolled["token"], "physical_process")
+    with app.app_context():
+        solve_id = get_db().execute("SELECT id FROM solves").fetchone()["id"]
+    page = f"/admin/events/{event['id']}/solves?team={enrolled['team']['id']}&page=0"
+    resp = admin.post(f"/admin/events/{event['id']}/solves/{solve_id}/void", data=CSRF,
+                      headers={"Referer": f"http://localhost{page}"})
+    assert resp.status_code == 302 and resp.headers["Location"].endswith(page)
+
+
 def test_distinct_names_are_fine(client, event):
     for name in ("Team 1", "Team 2", "Blue", "Grün"):
         assert enroll(client, event, team=name).status_code == 201, name
@@ -696,7 +756,7 @@ def test_submissions_csv(admin, client, enrolled, event):
     client.post("/api/v1/solves", headers=auth(enrolled["token"]),
                 json={"challenge_id": "physical_process", "flag": "CybICS(guess)"})
     text = admin.get(f"/admin/events/{event['id']}/export/submissions.csv").data.decode()
-    assert text.splitlines()[0] == "received_at,team,challenge,result,address,instance_id"
+    assert text.splitlines()[0] == "received_at,team,challenge,result,address,instance_id,device_id"
     assert "invalid_flag" in text and "CybICS(guess)" not in text
 
 

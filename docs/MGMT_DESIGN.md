@@ -159,7 +159,10 @@ Rules:
   canonical JSON of `{device, seq, id, action, params}`. The client verifies with the pinned key in
   plain standard-library Python (`pow`, then a constant-time comparison with the expected encoding;
   it never parses the padding). The server signs with `cryptography`; the key lives in
-  `/data/fleet_signing_key.pem` and is created on first start.
+  `/data/fleet_signing_key.pem`. It is created on first use, but only while no device is enrolled:
+  after that a missing key has to come back from a backup (`flask ... backup` writes it next to
+  the database), or be replaced on purpose with `flask ... new-signing-key`. Without it there are
+  no jobs and no enrolments; heartbeats and the CTF go on.
 - **Sequenced.** `seq` increases per device. The client runs a job only if its `seq` is higher than
   the last one it accepted. That stops replays without trusting a clock (a Pi Zero has no RTC).
 - **Allowed on the device.** The device owner enables management on the landing page, action by

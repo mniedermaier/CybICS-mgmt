@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from conftest import ADMIN_PASSWORD, auth
+from conftest import ADMIN_PASSWORD, auth, login
 from cybics_mgmt import create_app
 from cybics_mgmt.db import get_db
 from cybics_mgmt.fleet import jobs, signing
@@ -80,6 +80,72 @@ def test_an_unreadable_key_is_never_replaced(tmp_path):
     assert (tmp_path / signing.KEY_FILE).read_text() == "garbage"
 
 
+def keyless_app(tmp_path):
+    """An app that keeps its signing key in the data volume, as in production."""
+    return create_app({"DATA_DIR": str(tmp_path), "DATABASE": str(tmp_path / "db.sqlite"), "SECRET_KEY": "test",
+                       "ADMIN_PASSWORD": ADMIN_PASSWORD})
+
+
+def test_a_missing_key_is_not_recreated_once_devices_pinned_it(tmp_path):
+    app = keyless_app(tmp_path)
+    device = enrol_device(app.test_client(), app)
+    (tmp_path / signing.KEY_FILE).unlink()                       # e.g. a restore without the key
+    app = keyless_app(tmp_path)
+    with pytest.raises(signing.KeyUnavailable, match="new-signing-key"):
+        signing.get_signer(app)
+    assert not (tmp_path / signing.KEY_FILE).exists()
+    # Without the key: no jobs, and no enrolment, but the heartbeat goes on.
+    client = app.test_client()
+    answer = beat(client, device)
+    assert answer["jobs"] == [] and answer["signing_key_fingerprint"] is None
+    with app.app_context():
+        code = fleet.create_code(get_db(), "", None)["code"]
+    resp = client.post("/api/v1/enroll", json={"code": code, "device": LAPTOP})
+    assert resp.status_code == 503 and resp.get_json()["error"]["code"] == "unavailable"
+    with app.app_context():
+        assert get_db().execute("SELECT COUNT(*) FROM devices").fetchone()[0] == 1   # none created
+    # The organiser replaces it on purpose.
+    result = app.test_cli_runner().invoke(args=["new-signing-key", "--yes"])
+    assert result.exit_code == 0, result.output
+    fingerprint = signing.get_signer(app).fingerprint
+    assert fingerprint in result.output and fingerprint != device["fingerprint"]
+    with app.app_context():
+        log = [r[0] for r in get_db().execute("SELECT action FROM admin_log")]
+    assert "fleet_signing_key_replaced" in log
+
+
+def test_without_its_key_the_device_page_says_why(tmp_path):
+    app = keyless_app(tmp_path)
+    device = enrol_device(app.test_client(), app)
+    (tmp_path / signing.KEY_FILE).write_text("garbage")
+    app = keyless_app(tmp_path)
+    admin = app.test_client()
+    login(admin)
+    with admin.session_transaction() as sess:
+        sess["csrf"] = "csrf-test"
+    page = admin.get(f"/admin/fleet/devices/{device['device_id']}").data
+    assert b"signing key is unavailable" in page
+    resp = admin.post(f"/admin/fleet/devices/{device['device_id']}/jobs",
+                      data={**CSRF, "action": "identify"}, follow_redirects=True)
+    assert b"re-enrolling every device" in resp.data
+
+
+def test_the_backup_carries_the_signing_key(tmp_path):
+    app = keyless_app(tmp_path)
+    enrol_device(app.test_client(), app)
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    runner = app.test_cli_runner()
+    for _ in range(2):
+        assert runner.invoke(args=["backup", str(backups), "--keep", "1"]).exit_code == 0
+        time.sleep(1.1)   # timestamped names
+    names = sorted(os.listdir(backups))
+    assert len(names) == 2 and names[0].endswith(".sqlite") and names[1].endswith(".sqlite.signing-key.pem")
+    key = backups / names[1]
+    assert key.read_bytes() == (tmp_path / signing.KEY_FILE).read_bytes()
+    assert key.stat().st_mode & 0o777 == 0o600
+
+
 def test_canonical_json_matches_the_client():
     job = {"id": "j", "device": "d", "seq": 3, "action": "message", "params": {"text": "Grüße"}, "extra": 1}
     assert signing.canonical(job) == job_message(job)
@@ -96,6 +162,22 @@ def test_heartbeat_records_what_the_device_allows(client, app):
     beat(client, device, fingerprint="not hex")
     with app.app_context():
         assert fleet.get_device(get_db(), device["device_id"])["key_fingerprint"] is None
+
+
+def test_a_heartbeat_without_management_allows_nothing(client, app):
+    device = enrol_device(client, app)
+    client.post("/api/v1/heartbeat", headers=auth(device["token"]), json={"status": {}})
+    with app.app_context():
+        row = fleet.get_device(get_db(), device["device_id"])
+    assert json.loads(row["allowed_actions"]) == [] and row["key_fingerprint"] is None
+
+
+def test_a_job_result_with_a_lone_surrogate_is_ignored(client, app):
+    device = enrol_device(client, app)
+    resp = client.post("/api/v1/heartbeat", headers=auth(device["token"]),
+                       data='{"job_results": [{"id": "\\ud800", "state": "done"}]}',
+                       content_type="application/json")
+    assert resp.status_code == 200
 
 
 # ---------- creating jobs ----------

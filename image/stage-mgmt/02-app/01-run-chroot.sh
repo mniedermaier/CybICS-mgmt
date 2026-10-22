@@ -28,7 +28,8 @@ ConditionPathExists=/opt/cybics-mgmt/images
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash -c 'for img in /opt/cybics-mgmt/images/*.tar; do echo "Loading $img"; docker load -i "$img"; done'
+# -e: a failed load fails the unit, so the tarballs stay for the next boot.
+ExecStart=/bin/bash -ec 'for img in /opt/cybics-mgmt/images/*.tar; do echo "Loading $img"; docker load -i "$img"; done'
 ExecStartPost=/bin/rm -rf /opt/cybics-mgmt/images
 ExecStartPost=/bin/systemctl disable cybics-mgmt-first-boot.service
 RemainAfterExit=yes

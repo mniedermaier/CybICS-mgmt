@@ -144,8 +144,9 @@ def test_the_pi_password_goes_to_the_host_directory(fresh):
     client = logged_in(fresh)
     host_dir = fresh.config["HOST_DIR"]
     assert b"Raspberry Pi login" in client.get("/admin/password").data
-    page = client.post("/admin/password", data={**CSRF, "target": "pi", "password": "new-pi-pass",
-                                                "confirm": "new-pi-pass"}, follow_redirects=True)
+    page = client.post("/admin/password", data={**CSRF, "target": "pi", "current": "first-admin-pw",
+                                                "password": "new-pi-pass", "confirm": "new-pi-pass"},
+                       follow_redirects=True)
     assert b"Sent to the Raspberry Pi" in page.data and b"being applied" in page.data
     request = os.path.join(host_dir, "pi-password.json")
     assert os.stat(request).st_mode & 0o777 == 0o600
@@ -164,9 +165,20 @@ def test_the_pi_password_goes_to_the_host_directory(fresh):
 ])
 def test_bad_pi_passwords_are_refused(fresh, password, confirm, message):
     client = logged_in(fresh)
-    page = client.post("/admin/password", data={**CSRF, "target": "pi", "password": password,
-                                                "confirm": confirm}, follow_redirects=True)
+    page = client.post("/admin/password", data={**CSRF, "target": "pi", "current": "first-admin-pw",
+                                                "password": password, "confirm": confirm}, follow_redirects=True)
     assert message in page.data
+    assert not os.path.exists(os.path.join(fresh.config["HOST_DIR"], "pi-password.json"))
+
+
+@pytest.mark.parametrize("current", ["", "wrong-admin-pw"])
+def test_the_pi_password_needs_the_admin_password(fresh, current):
+    """It also allows sudo on the Pi: a stolen admin session alone must not be enough."""
+    client = logged_in(fresh)
+    page = client.post("/admin/password", data={**CSRF, "target": "pi", "current": current,
+                                                "password": "new-pi-pass", "confirm": "new-pi-pass"},
+                       follow_redirects=True)
+    assert b"current admin password is wrong" in page.data
     assert not os.path.exists(os.path.join(fresh.config["HOST_DIR"], "pi-password.json"))
 
 

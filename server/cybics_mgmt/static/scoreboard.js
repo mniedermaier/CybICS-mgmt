@@ -195,12 +195,16 @@
 
   // ---------- header ----------
 
+  // Running time only: a pause, and the gap before an event is reopened,
+  // do not count.
   function showElapsed() {
-    if (elapsed.dataset.state === "paused") return;   // the clock stands still during a pause
+    const stopped = parseFloat(elapsed.dataset.stopped) || parseFloat(elapsed.dataset.finished);
+    // An event paused before the server recorded stopped_at: stand still.
+    if (elapsed.dataset.state === "paused" && !stopped) return;
     const started = parseFloat(elapsed.dataset.started);
     if (!started) { elapsed.textContent = "--:--:--"; return; }
-    const end = parseFloat(elapsed.dataset.finished) || (Date.now() / 1000 + offset);
-    const total = Math.max(0, Math.floor(end - started));
+    const end = stopped || (Date.now() / 1000 + offset);
+    const total = Math.max(0, Math.floor(end - started - (parseFloat(elapsed.dataset.paused) || 0)));
     const pad = (n) => String(n).padStart(2, "0");
     elapsed.textContent = pad(Math.floor(total / 3600)) + ":" + pad(Math.floor(total / 60) % 60) + ":" + pad(total % 60);
   }
@@ -215,6 +219,8 @@
     offset = data.server_time - Date.now() / 1000;
     elapsed.dataset.started = data.event.started_at || "";
     elapsed.dataset.finished = data.event.finished_at || "";
+    elapsed.dataset.stopped = data.event.stopped_at || "";
+    elapsed.dataset.paused = data.event.paused_seconds || 0;
     elapsed.dataset.state = "";
     showElapsed();
     elapsed.dataset.state = data.event.state;
@@ -225,10 +231,12 @@
   // Keep showing the last good data when the server is unreachable, but say
   // so: a projector silently showing a stale board is worse than no board.
   let lastOk = new Date();
+  let wasStale = false;   // announce only changes, so every loss is announced
   function stale() {
     updated.textContent = "connection lost, last update " + clock24(lastOk);
     updated.className = "stale";
-    if (status && !status.textContent) status.textContent = "Scoreboard connection lost.";
+    if (status && !wasStale) status.textContent = "Scoreboard connection lost.";
+    wasStale = true;
   }
 
   let initial = true;
@@ -244,7 +252,8 @@
       lastOk = new Date();
       updated.textContent = clock24(lastOk);
       updated.className = "";
-      if (status && status.textContent) status.textContent = "Scoreboard connection restored.";
+      if (status && wasStale) status.textContent = "Scoreboard connection restored.";
+      wasStale = false;
     } catch (e) {
       stale();
     }

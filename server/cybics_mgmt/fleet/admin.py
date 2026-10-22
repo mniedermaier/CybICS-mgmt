@@ -11,7 +11,8 @@ from ..db import get_db, now
 from ..security import admin_required, audit, client_ip
 from . import jobs
 from . import logic as fleet
-from .signing import get_signer
+from .logic import FleetError
+from .signing import KeyUnavailable, get_signer
 
 
 def _device_or_404(device_id):
@@ -52,13 +53,16 @@ def fleet_device(device_id):
     device = _device_or_404(device_id)
     status = device_input.parse_status(device["status_json"])
     online = (device["last_seen"] or 0) >= now() - current_app.config["ONLINE_WINDOW"]
-    signer = get_signer(current_app)
+    try:
+        signer, blocked = get_signer(current_app), None
+    except KeyUnavailable as exc:
+        signer, blocked = None, f"the server's signing key is unavailable ({exc})"
     services = sorted(status["services"]) if isinstance(status.get("services"), dict) else []
     return render_template("admin/device.html", device=device, status=status, online=online,
                            status_pretty=device_input.pretty_status(status), groups=fleet.list_groups(db),
                            instances=fleet.device_instances(db, device_id), actions=jobs.ACTIONS,
                            allowed=jobs.allowed_actions(device), services=services,
-                           blocked=jobs.device_problem(device, signer.fingerprint),
+                           blocked=blocked or jobs.device_problem(device, signer.fingerprint),
                            signer=signer, jobs=jobs.list_jobs(db, device_id),
                            # Teams the organiser can put the device into (ctf/admin.py does it).
                            teams=db.execute("""SELECT t.id, t.name, e.name AS event FROM teams t
@@ -91,6 +95,13 @@ def fleet_device_action(device_id, action):
     return redirect(url_for("admin.fleet_device", device_id=device_id))
 
 
+def _signer():
+    try:
+        return get_signer(current_app)
+    except KeyUnavailable as exc:
+        raise FleetError("signing_key", str(exc), 503) from None
+
+
 def _creator():
     return f"web {client_ip()}"
 
@@ -101,7 +112,7 @@ def fleet_job_create(device_id):
     db = get_db()
     device = _device_or_404(device_id)
     action = request.form.get("action", "")
-    job = jobs.create_job(db, get_signer(current_app), device, action, request.form.to_dict(), _creator())
+    job = jobs.create_job(db, _signer(), device, action, request.form.to_dict(), _creator())
     audit("fleet_job_create", device=device_id, job=job["id"], job_action=action, params=job["params_json"])
     flash("Sent. The device picks it up at its next check-in.", "ok")
     return redirect(url_for("admin.fleet_device", device_id=device_id))
@@ -116,7 +127,7 @@ def fleet_jobs_bulk():
     if action not in jobs.ACTIONS:
         flash("Choose an action.", "error")
         return redirect(url_for("admin.fleet_devices"))
-    signer = get_signer(current_app)
+    signer = _signer()
     created, skipped = [], 0
     for device_id in request.form.getlist("device_id")[:500]:
         device = fleet.get_device(db, device_id)

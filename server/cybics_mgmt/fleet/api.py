@@ -12,7 +12,7 @@ from ..security import audit, client_ip, limiter
 from . import jobs
 from . import logic as fleet
 from .logic import FleetError
-from .signing import get_signer
+from .signing import KeyUnavailable, get_signer
 
 log = logging.getLogger("cybics_mgmt")
 
@@ -36,6 +36,16 @@ def authenticate():
     return device
 
 
+def _signer():
+    """The job-signing key, or None (logged, at most once a minute) if it is unavailable."""
+    try:
+        return get_signer(current_app)
+    except KeyUnavailable as exc:
+        if limiter.hit("audit-signing-key", 1, 60):
+            log.error("fleet: no jobs and no enrolment: %s", exc)
+        return None
+
+
 @bp.post("/enroll")
 def enroll():
     # Flood guards that count only provably bad requests and devices actually
@@ -51,6 +61,10 @@ def enroll():
         raise FleetError("rate_limited", "Too many new devices from this address. Ask the organiser.", 429)
     data = json_body()
     db = get_db()
+    # Before creating the device: one that cannot pin a key is of no use.
+    signer = _signer()
+    if signer is None:
+        raise FleetError("unavailable", "The server cannot enrol devices right now. Ask the organiser.", 503)
     try:
         device_id, token, device = fleet.enroll_device(db, data.get("code"), data.get("device"),
                                                        data.get("label"), client_ip())
@@ -64,7 +78,7 @@ def enroll():
     log.info("enrol: %s device %s from %s", device["kind"], device_id[:8], client_ip())
     # The device pins this key and runs only jobs signed with it.
     return jsonify({"device_id": device_id, "token": token, "device": _device_json(device),
-                    "signing_key": get_signer(current_app).public,
+                    "signing_key": signer.public,
                     "heartbeat_interval": current_app.config["HEARTBEAT_INTERVAL"]}), 201
 
 
@@ -85,10 +99,11 @@ def heartbeat():
         audit("fleet_job_finished", actor=f"device {device['id'][:8]}", job=job["id"], job_action=job["action"],
               state=job["state"], detail=job["detail"])
     device = fleet.get_device(db, device["id"])
-    signer = get_signer(current_app)
+    # Without the key there are no jobs, but status and the CTF part go on.
+    signer = _signer()
     answer = {"device": _device_json(device),
-              "jobs": jobs.for_delivery(db, device, signer.fingerprint),
-              "signing_key_fingerprint": signer.fingerprint,
+              "jobs": jobs.for_delivery(db, device, signer.fingerprint) if signer else [],
+              "signing_key_fingerprint": signer.fingerprint if signer else None,
               "heartbeat_interval": current_app.config["HEARTBEAT_INTERVAL"],
               "server_time": now()}
     for part in HEARTBEAT_PARTS:

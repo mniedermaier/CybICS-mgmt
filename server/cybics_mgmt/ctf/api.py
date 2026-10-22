@@ -11,7 +11,7 @@ import threading
 import time
 import unicodedata
 
-from flask import current_app, jsonify
+from flask import current_app, jsonify, request
 
 from ..api import HEARTBEAT_PARTS, bp, json_body, rate_limit
 from ..db import get_db, now
@@ -45,6 +45,8 @@ def _event_json(event):
     return {"name": event["name"], "slug": event["slug"], "state": event["state"],
             "created_at": event["created_at"],
             "started_at": event["started_at"], "finished_at": event["finished_at"],
+            # Running time = (stopped_at or now) - started_at - paused_seconds.
+            "stopped_at": event["stopped_at"], "paused_seconds": event["paused_seconds"],
             "scoreboard_public": bool(event["scoreboard_public"]),
             "first_blood_bonus": event["first_blood_bonus"]}
 
@@ -120,9 +122,19 @@ def ctf_join():
 
 @bp.delete("/ctf/join")
 def ctf_leave():
-    """The user left the event in the landing page. The device stays enrolled."""
+    """
+    The user left the event in the landing page. The device stays enrolled.
+    An optional JSON body {"instance_id": ...} leaves only that instance: a
+    client retrying a leave that did not get through must not end an
+    instance the organiser created meanwhile.
+    """
     device = authenticate()
-    ctf.leave(get_db(), device["id"])
+    try:
+        data = request.get_json(silent=True) if request.content_length else None
+    except RecursionError:
+        data = None
+    instance_id = data.get("instance_id") if isinstance(data, dict) else None
+    ctf.leave(get_db(), device["id"], instance_id if _usable(instance_id) else None)
     return "", 204
 
 

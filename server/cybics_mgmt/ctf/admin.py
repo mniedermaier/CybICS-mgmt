@@ -5,7 +5,7 @@ solves, the audit trail and exports.
 from flask import abort, current_app, flash, redirect, render_template, request, url_for
 
 from .. import device_input
-from ..admin import bp, csv_response, lockouts
+from ..admin import _back_here, bp, csv_response, lockouts
 from ..db import get_db, now
 from ..fleet import logic as fleet
 from ..security import admin_required, audit
@@ -31,13 +31,14 @@ def _event_or_404(event_id):
 
 
 def _owned(table, row_id, event_id):
-    """Make sure a team/instance/solve id posted to an event page belongs to that event."""
+    """Make sure a team/instance/solve/challenge id posted to an event page belongs to that event."""
     queries = {
         "teams": "SELECT 1 FROM teams WHERE id = ? AND event_id = ?",
         "instances": """SELECT 1 FROM instances i JOIN teams t ON t.id = i.team_id
                         WHERE i.id = ? AND t.event_id = ?""",
         "solves": """SELECT 1 FROM solves s JOIN teams t ON t.id = s.team_id
                      WHERE s.id = ? AND t.event_id = ?""",
+        "challenges": "SELECT 1 FROM challenges WHERE id = ? AND event_id = ?",
     }
     if not get_db().execute(queries[table], (row_id, event_id)).fetchone():
         abort(404)
@@ -201,6 +202,7 @@ def challenge_update(event_id, challenge_id):
         points = int(request.form.get("points", "")[:9])
     except ValueError:
         raise CTFError("invalid_points", "Points must be a number.") from None
+    _owned("challenges", challenge_id, event_id)
     ctf.update_challenge(get_db(), event_id, challenge_id, points, "enabled" in request.form)
     audit("update_challenge", event_id=event_id, challenge_id=challenge_id, points=points,
           enabled="enabled" in request.form)
@@ -243,7 +245,8 @@ def teams_bulk(event_id):
     """Disqualify or delete several teams at once, e.g. after a junk-team flood."""
     _event_or_404(event_id)
     db = get_db()
-    ids = [int(t) for t in request.form.getlist("team_id") if t.isdecimal() and t.isascii()]
+    # Bounded: SQLite takes at most a few thousand bound values per statement.
+    ids = [int(t) for t in request.form.getlist("team_id")[:1000] if t.isdecimal() and t.isascii()]
     teams = db.execute(f"""SELECT id, name FROM teams WHERE event_id = ?
                            AND id IN ({",".join("?" * len(ids)) or "NULL"})""", (event_id, *ids)).fetchall()
     action = request.form.get("action")
@@ -413,9 +416,9 @@ def export(event_id, kind):
                   "instance_id", "instance_clock"]
     elif kind == "submissions":
         rows = db.execute("""
-            SELECT received_at, team_name, challenge_key, result, remote_addr, instance_id
+            SELECT received_at, team_name, challenge_key, result, remote_addr, instance_id, device_id
             FROM submissions WHERE event_id = ? ORDER BY received_at""", (event_id,))
-        header = ["received_at", "team", "challenge", "result", "address", "instance_id"]
+        header = ["received_at", "team", "challenge", "result", "address", "instance_id", "device_id"]
     elif kind == "log":
         rows = db.execute(f"""SELECT created_at, actor, action, details FROM admin_log
                               WHERE {EVENT_LOG} ORDER BY created_at""", (event_id, event["created_at"]))
@@ -444,4 +447,4 @@ def solve_action(event_id, solve_id, action):
     ctf.set_solve_voided(get_db(), solve_id, action == "void")
     audit(f"solve_{action}", event_id=event_id, solve_id=solve_id)
     flash("Solve voided: it no longer scores." if action == "void" else "Solve restored.", "ok")
-    return _back(event_id, "solves")
+    return _back_here()   # keeps the team filter and the page

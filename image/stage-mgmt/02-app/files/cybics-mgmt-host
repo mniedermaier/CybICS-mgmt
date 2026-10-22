@@ -8,20 +8,33 @@ card), which it sees as MGMT_HOST_DIR. cybics-mgmt-host.path starts this
 script when a request appears; it also runs once at boot.
 
 Only one request exists: a new password for the "pi" account, applied with
-chpasswd. The request file is deleted before anything else happens. The
-answer, and whether pi still has the default password "raspberry", go to
-status.json for the admin UI.
+chpasswd. The request is moved out of the server's reach before anything
+else happens. The answer, and whether pi still has the default password
+"raspberry", go to status.json for the admin UI. Once pi has a password of
+its own, SSH is switched on (the image ships with it off, because the
+access point's Wi-Fi password is public).
+
+The request directory belongs to the container's user, so a compromised
+server controls every name in it: nothing there is followed as a symlink,
+opened unless it is a regular file, or trusted as earlier output. What this
+script keeps for itself lives in PRIVATE, which only root can enter.
 """
 import hmac
 import json
 import os
 import re
+import shutil
+import stat
 import subprocess
+import tempfile
 import time
 
 DIRECTORY = "/run/cybics-mgmt"
 REQUEST = os.path.join(DIRECTORY, "pi-password.json")
 STATUS = os.path.join(DIRECTORY, "status.json")
+PRIVATE = "/run/cybics-mgmt-host"
+LAST = os.path.join(PRIVATE, "last.json")
+TAKEN = os.path.join(PRIVATE, "request.json")
 USER = "pi"
 
 
@@ -40,16 +53,45 @@ def default_password():
     return hmac.compare_digest(result.stdout, stored)
 
 
-def apply_request():
-    """Apply a waiting request. Returns the result for status.json, or None if there was none."""
+def remove(path):
+    """Delete whatever is at `path`; a directory goes with its content, symlinks in it unfollowed."""
     try:
-        with open(REQUEST, encoding="utf-8") as f:
-            raw = f.read(4096)
+        os.unlink(path)
+    except IsADirectoryError:
+        shutil.rmtree(path, ignore_errors=True)
+    except FileNotFoundError:
+        pass
+
+
+def take_request():
+    """
+    The waiting request's content, or None. It is renamed into PRIVATE first
+    (a rename moves a symlink itself, never its target), so a request written
+    while this one is applied waits for the next run instead of being deleted
+    unread.
+    """
+    try:
+        os.rename(REQUEST, TAKEN)
     except FileNotFoundError:
         return None
+    try:
+        fd = os.open(TAKEN, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        raise ValueError("the request is not a regular file") from None
     finally:
-        if os.path.exists(REQUEST):
-            os.unlink(REQUEST)
+        remove(TAKEN)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise ValueError("the request is not a regular file")
+    with os.fdopen(fd, "rb") as f:
+        return f.read(4096).decode("utf-8")
+
+
+def apply_request():
+    """Apply a waiting request. Returns the result for status.json, or None if there was none."""
+    raw = take_request()
+    if raw is None:
+        return None
     data = json.loads(raw)
     password = data.get("password") if isinstance(data, dict) else None
     if not isinstance(data, dict) or data.get("user") != USER:
@@ -61,24 +103,52 @@ def apply_request():
     return {"state": "done", "detail": "", "time": time.time()}
 
 
+def write_json(directory, path, data):
+    """Write `data` to `path` atomically, through a new file that cannot be a symlink planted beforehand."""
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".status.")   # O_CREAT | O_EXCL, mode 0600
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+            os.fchmod(f.fileno(), 0o644)
+        os.replace(tmp, path)   # replaces whatever is at `path`, a symlink included, without following it
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def enable_ssh():
+    """SSH comes on once pi has a password of its own (it stays on after that)."""
+    try:
+        subprocess.run(["systemctl", "enable", "--now", "ssh"], check=True, capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        pass   # reported nowhere: the next run tries again
+
+
 def main():
+    os.makedirs(PRIVATE, mode=0o700, exist_ok=True)
+    remove(TAKEN)   # left over if a run was cut short
     try:
         last = apply_request()
     except Exception as exc:   # any problem is reported, never left unanswered
         detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) and exc.stderr else str(exc)
         last = {"state": "failed", "detail": detail[:200], "time": time.time()}
-    try:
-        with open(STATUS, encoding="utf-8") as f:
-            previous = json.load(f)
-    except (OSError, ValueError):
-        previous = {}
-    status = {"pi_default_password": default_password(),
-              "last": last if last is not None else previous.get("last")}
-    tmp = STATUS + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(status, f)
-    os.chmod(tmp, 0o644)
-    os.replace(tmp, STATUS)
+    if last is None:
+        try:
+            with open(LAST, encoding="utf-8") as f:
+                last = json.load(f)
+        except (OSError, ValueError):
+            last = None
+    else:
+        write_json(PRIVATE, LAST, last)
+    default = default_password()
+    if default is False:
+        enable_ssh()
+    status = {"pi_default_password": default, "last": last}
+    write_json(PRIVATE, os.path.join(PRIVATE, "status.json"), status)   # for cybics-mgmt-issue
+    write_json(DIRECTORY, STATUS, status)
 
 
 if __name__ == "__main__":

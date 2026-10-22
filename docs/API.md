@@ -27,6 +27,7 @@ know.
 | 413 | Body too large: 16 KB for `/enroll` and `/ctf/join`, 64 KB for the rest of the API, 256 KB for a log bundle. |
 | 429 `rate_limited` | Back off. Also `too_many_instances` when more than 100 devices joined a team within an hour. |
 | 503 `busy` | No password-hashing slot within 2 s, or the team changed during the request. Retry after a few seconds. |
+| 503 `unavailable` | `/enroll` only: the server cannot hand out its job-signing key right now (lost or unreadable; the organiser has to restore it). Retry later. |
 | 4xx without this JSON shape | Not from this server (a reverse proxy's error page while the backend restarts). Treat it like a 5xx: keep queued data and retry. |
 | 5xx / no answer | Transient. Keep queued data and retry later. |
 
@@ -140,8 +141,8 @@ announcement it has shown.
   "ctf": {
     "instance_id": "51c9cbca-…",         // changes whenever the device joins a team again
     "event": {"name": "Demo Event", "slug": "demo", "state": "running", "created_at": 1790844300.1,
-              "started_at": 1790844318.6, "finished_at": null, "scoreboard_public": true,
-              "first_blood_bonus": 10},
+              "started_at": 1790844318.6, "finished_at": null, "stopped_at": null, "paused_seconds": 0,
+              "scoreboard_public": true, "first_blood_bonus": 10},
     "team": {"id": 3, "name": "PLC Pwners", "banned": false, "score": 1250, "rank": 2, "teams": 14},
     "solved": ["scanning", "opcua"],       // on record for the team, voided solves included
     "catalog_version": "3f9a1c0d2b7e4a55", // changes when the enabled challenges or their flags change
@@ -152,14 +153,20 @@ announcement it has shown.
 ```
 
 - `jobs` holds at most 5 open jobs, oldest first, and stays empty while the device's
-  `key_fingerprint` is not the server's. A job is repeated in every answer until its result
+  `key_fingerprint` is not the server's. While the server cannot read its signing key,
+  `jobs` is empty and `signing_key_fingerprint` is `null`; everything else, the CTF part
+  included, works as usual. A job is repeated in every answer until its result
   arrives; the client runs each `seq` once.
 - `ctf` is `null` while the device is in no event: it never joined, it left, the organiser took it
   out, or its team or event was deleted. A client that was in an event stops sending solves and
   keeps queuing them, because the device is most likely coming back.
 - `ctf` names a team the client did not join itself when the organiser put the device there. The
   client adopts it like a join of its own. A new `instance_id` means a new membership.
-- `event.created_at` tells a recreated event apart from an older one with the same slug. `rank` is
+- `event.created_at` tells a recreated event apart from an older one with the same slug.
+  `stopped_at` is when the event last stopped running (paused or finished), `null` while it runs;
+  `paused_seconds` adds up the stops it came back from. The running time is
+  `(stopped_at or now) - started_at - paused_seconds`. An event paused before a server knew these
+  fields has `stopped_at` `null` until it runs again. `rank` is
   `null` while the team has no place on the board (it is disqualified). The standing is at most 2 s
   old.
 
@@ -179,8 +186,8 @@ call creates the team, provided the event allows self-registration.
   "instance_id": "51c9cbca-…",
   "team": {"id": 3, "name": "PLC Pwners"},
   "event": {"name": "Demo Event", "slug": "demo", "state": "running", "created_at": 1790844300.1,
-            "started_at": 1790844318.6, "finished_at": null, "scoreboard_public": true,
-            "first_blood_bonus": 10}
+            "started_at": 1790844318.6, "finished_at": null, "stopped_at": null, "paused_seconds": 0,
+            "scoreboard_public": true, "first_blood_bonus": 10}
 }
 ```
 
@@ -196,10 +203,12 @@ instance, so joining ends any other membership the device had, in this event or 
   `400 invalid_team_name`, which rules out look-alike letters from other scripts.
 - A new team name that looks like an existing one on a projector is refused with `409
   team_name_taken`. That covers case (including non-ASCII case, so "ärger Team" next to "Ärger
-  Team"), accents, spacing, punctuation, and `0`/`o` or `1`/`l`.
+  Team"), accents, Latin letters that only look like another one (`ı`, `ø`, `ł`, `đ`, `ŧ`, …),
+  spacing, punctuation, and `0`/`o` or `1`/`l`.
 - A **new** team needs a password of 8 to 128 characters that is not a well-known one, not the team
   name, and not one repeated character (`400 weak_team_password`). Joining an existing team needs its
-  password, whatever its length.
+  password; a password longer than 128 characters is refused before it is compared
+  (`400 invalid_team_password`), and no team has one.
 - One address may create at most 100 new teams per 10 minutes (`429`). Only teams that were actually
   created count, so failed attempts use up no quota.
 - A team can have at most 25 live devices (`409 too_many_instances`), and at most 100 devices may
@@ -233,6 +242,10 @@ sees addresses that hit the guard and can clear them.
 
 The user left the event on the landing page. The device's instance ends; the device stays enrolled.
 `204`, also when the device was in no event.
+
+An optional body `{"instance_id": "51c9cbca-…"}` ends only that instance. A client retrying a leave
+that did not get through sends it, so the retry cannot end a membership the organiser created in
+the meantime. A body that is not such an object is ignored.
 
 ## 🔒 `POST /solves`
 

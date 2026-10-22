@@ -139,13 +139,19 @@
 <div class="panel">
   <h2>Retire</h2>
   {% if device.retired %}
-  <p class="muted">Retired{% if device.retired_reason == 'left' %} by the device itself (management switched off on the landing page){% endif %}.
-    Bringing it back makes its token work again.</p>
+  {% if device.retired_reason == 'left' %}
+  <p class="muted">Retired by the device itself (management switched off on the landing page). It discarded its
+    token; to come back it connects again from its landing page, as a new device.</p>
+  {% else %}
+  <p class="muted">Retired. Bringing it back makes its token work again, but only helps a device that has not
+    checked in since: one that did was told it is retired, discarded its connection and has to connect again
+    from its landing page. It does not rejoin its event either way.</p>
   <form method="post" action="{{ url_for('admin.fleet_device_action', device_id=device.id, action='restore') }}">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="secondary" type="submit">Bring back</button></form>
+  {% endif %}
   {% else %}
-  <p class="muted">A retired device leaves the list and its fleet token stops working. Its history stays; nothing is deleted.
-    CTF participation is not affected: revoke instances on the event's Instances page.</p>
+  <p class="muted">A retired device leaves the list, its fleet token stops working and it leaves its CTF event.
+    Its history, its solves and its team stay; nothing is deleted.</p>
   <form method="post" action="{{ url_for('admin.fleet_device_action', device_id=device.id, action='retire') }}" data-confirm="Retire this device?">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="danger" type="submit">Retire</button></form>
   {% endif %}
