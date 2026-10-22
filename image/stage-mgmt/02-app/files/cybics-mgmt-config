@@ -64,16 +64,52 @@ def read_settings(path, problems):
         if not sep or key not in CHECKS:
             problems.append(f"line {number}: unknown setting {key!r}")
             continue
-        if key in ("WIFI_COUNTRY", "DEFAULT_ENROL_CODE"):
-            value = value.upper()
-        elif key in ("HDMI_SCOREBOARD", "HDMI_THEME"):
-            value = value.lower()
+        value = normalise(key, value)
         check, rule = CHECKS[key]
         if check(value):
             settings[key] = value
         else:
             problems.append(f"line {number}: {key} must be {rule}; keeping {DEFAULTS[key]!r}")
     return settings
+
+
+def normalise(key, value):
+    """A value as it is read from the file: codes in upper case, the HDMI words in lower case."""
+    value = value.strip()
+    if key in ("WIFI_COUNTRY", "DEFAULT_ENROL_CODE"):
+        return value.upper()
+    if key in ("HDMI_SCOREBOARD", "HDMI_THEME"):
+        return value.lower()
+    return value
+
+
+def write_settings(path, values):
+    """
+    Set KEY=value lines in cybics-mgmt.txt (the admin UI, through
+    cybics-mgmt-host), keeping its comments and order; keys it lacks are
+    appended. The values must have passed CHECKS. Written atomically.
+    """
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            lines = f.read().splitlines()
+    except FileNotFoundError:
+        lines = []
+    done = set()
+    for number, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key = stripped.partition("=")[0].strip().upper()
+        if key in values:
+            lines[number] = f"{key}={values[key]}" if key not in done else f"# {line}"
+            done.add(key)
+    lines += [f"{key}={value}" for key, value in values.items() if key not in done]
+    tmp = path + ".new"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 
 
 def replace_lines(path, values):

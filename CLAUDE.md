@@ -51,7 +51,8 @@ Never stage `server/data/`, `*.sqlite`, `.env` or anything holding a real admin 
   - `device_input.py`: checks for what installations send about themselves (identity, status),
     shared by both parts.
   - `security.py`: tokens, hashing, the rate limiter, admin password and session, CSRF.
-  - `host.py`: requests to the host on the Raspberry Pi image (the `pi` password), through
+  - `host.py`: requests to the host on the Raspberry Pi image (the `pi` password, the settings of
+    `cybics-mgmt.txt` on the admin page *Raspberry Pi*), through
     `MGMT_HOST_DIR`; the image's root service `cybics-mgmt-host` applies them.
   - `db.py`: SQLite and migrations.
   - `views.py`: template filters, error pages and security headers.
@@ -196,7 +197,9 @@ same way: `docker run --rm -v "$PWD:/src" python:3.12-alpine sh -c 'cd /src && r
   and a change ends every other session.
 - **The server never acts on its host by itself.** On the Raspberry Pi image it may only drop a
   request into `MGMT_HOST_DIR` (a tmpfs); `cybics-mgmt-host` accepts nothing but a new password for
-  `pi`, moves the request out of the server's reach first and reports in `status.json`. That
+  `pi` and values for the keys of `cybics-mgmt.txt`, which it checks with `cybics-mgmt-config`'s
+  own `CHECKS` (the same rules as at boot; `host.SETTINGS` repeats them for the UI, keep both in
+  sync). It moves each request out of the server's reach first and reports in `status.json`. That
   directory belongs to the container, so the root service follows no symlink in it, reads only
   regular files and keeps its own state in `/run/cybics-mgmt-host`. The containers stay
   unprivileged.

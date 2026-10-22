@@ -127,7 +127,7 @@ drawn by `tools/readme_animation.py`; the scoreboard was recorded from a real se
 |---|---|
 | Fleet: devices across events, telemetry, groups, enrolment codes, labels, retiring | ✅ Ready |
 | Fleet: signed remote actions on devices that allow them | ✅ Ready |
-| Admin password set in the browser, the Pi's `pi` password from the admin UI | ✅ Ready |
+| Admin password set in the browser; the Pi's `pi` password and settings from the admin UI | ✅ Ready |
 | CTF: events, teams, scoreboard, moderation, audit | ✅ Ready |
 | Reference client (`client/cybics_mgmt_client.py`) | ✅ Ready, tested on Python 3.9 and 3.12 |
 | Raspberry Pi image of CybICS-mgmt with the `cybics-mgmt` access point | ✅ Built by CI, attached to every release |
@@ -218,7 +218,8 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
    conv=fsync status=progress`, or Raspberry Pi Imager under "Use custom").
 2. Before the first boot, open the card's boot partition on any computer and edit `cybics-mgmt.txt`:
    Wi-Fi name, **password** and **country**, and the boards' enrolment code. It is
-   read at every boot, and the console lists any value it could not use.
+   read at every boot, and the console lists any value it could not use. Later, the admin page
+   *Raspberry Pi* changes the same settings and writes them back into this file.
 3. Boot the Pi. The first boot loads the containers and takes a few minutes.
 4. Join the Wi-Fi with a laptop and open `http://10.42.0.1/admin`. The first visit sets the admin
    password; do it before participants join the network.
@@ -226,6 +227,12 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
    `pi` / `raspberry`, and every admin page warns until it is changed. SSH stays off until then,
    because anybody on the access point could log in with the published password; it comes on as
    soon as the new password is set (or at the next boot, if you changed it on the console).
+
+**Settings in the browser.** The admin page *Raspberry Pi* shows everything in `cybics-mgmt.txt` and
+changes it, after the admin password: the Pi writes the new values into the file and applies them.
+The HDMI settings apply at once. A new server name or enrolment code restarts the server for a few
+seconds. A Wi-Fi change restarts the access point, so every board and laptop on it, the organiser's
+browser too, has to join again with the new values; the page asks for a confirmation first.
 
 **The default network.** CybICS boards with a USB Wi-Fi dongle look for `cybics-mgmt`. As soon as it
 is in range they connect and enrol with the code `CYBICS-BOARDS`, and show up in the fleet. If you

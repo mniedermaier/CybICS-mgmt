@@ -8,7 +8,7 @@ import csv
 import io
 from urllib.parse import parse_qsl, urlsplit
 
-from flask import Blueprint, Response, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, current_app, flash, redirect, render_template, request, url_for
 from werkzeug.exceptions import HTTPException
 from werkzeug.routing import RequestRedirect as RoutingRequestRedirect
 
@@ -38,7 +38,8 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 @bp.context_processor
 def _host_warning():
     # On the Raspberry Pi image: every admin page warns while pi / raspberry still works.
-    return {"pi_default_password": bool(host.directory()) and host.status()["pi_default_password"] is True}
+    on_pi = bool(host.directory())
+    return {"pi_default_password": on_pi and host.status()["pi_default_password"] is True, "pi_host": on_pi}
 
 
 @bp.before_request
@@ -198,6 +199,46 @@ def password():
         return redirect(url_for("admin.password"))
     return render_template("admin/password.html", from_env=from_env, minimum=ADMIN_PASSWORD_MIN,
                            host=host.status() if host.directory() else None, pi_minimum=host.PI_PASSWORD_MIN)
+
+
+@bp.route("/pi", methods=["GET", "POST"])
+@admin_required
+def pi_settings():
+    """
+    The settings of the Raspberry Pi image (cybics-mgmt.txt on its boot
+    partition), on the Pi only. The host writes them into that file and
+    applies them.
+    """
+    if not host.directory():
+        abort(404)
+    state = host.status()
+    if request.method == "POST":
+        current = state["settings"] or {}
+        wanted, problems = host.settings_problems(
+            {k: request.form[k] for k in host.SETTINGS if k in request.form})
+        changed = {k: v for k, v in wanted.items() if v != current.get(k)}
+        wifi = sorted(k for k in changed if k in host.WIFI_KEYS)
+        if not check_admin_password(request.form.get("current", "")):
+            flash("The current admin password is wrong.", "error")
+        elif problems:
+            for problem in problems:
+                flash(problem, "error")
+        elif not changed:
+            flash("Nothing changed.", "ok")
+        elif wifi and request.form.get("confirm_wifi") != "1":
+            flash("Changing the Wi-Fi restarts the access point. Tick the box to confirm.", "error")
+        else:
+            host.request_settings(changed)
+            # The Wi-Fi password is not a secret from the organiser, but it stays out of the log.
+            audit("pi_settings_requested", changed=sorted(changed))
+            notes = ["Sent to the Raspberry Pi; it writes them into cybics-mgmt.txt and applies them."]
+            if {"SERVER_NAME", "DEFAULT_ENROL_CODE"} & changed.keys():
+                notes.append("The server restarts for that: these pages are gone for a few seconds.")
+            if wifi:
+                notes.append("The access point restarts: everything on it, this browser too, has to join again.")
+            flash(" ".join(notes), "ok")
+        return redirect(url_for("admin.pi_settings"))
+    return render_template("admin/pi.html", host=state, settings=host.SETTINGS, wifi_keys=host.WIFI_KEYS)
 
 
 @bp.get("/login/link/<token>")

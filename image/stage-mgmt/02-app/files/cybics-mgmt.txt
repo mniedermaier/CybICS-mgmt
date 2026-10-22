@@ -1,7 +1,9 @@
 # CybICS-mgmt settings, read at every boot.
 #
 # This file is on the SD card's boot partition, which any computer can open.
-# Edit it there, put the card back and boot the Pi. Lines are KEY=value;
+# Edit it there, put the card back and boot the Pi. The admin page
+# "Raspberry Pi" (http://10.42.0.1/admin/pi) changes the same settings and
+# writes them back into this file. Lines are KEY=value;
 # lines starting with # are ignored. A value that is not valid is replaced by
 # its default below, and the console login screen says so.
 

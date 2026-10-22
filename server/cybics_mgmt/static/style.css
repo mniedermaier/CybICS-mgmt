@@ -237,6 +237,9 @@ input[type=number] { width: 6.5rem; }
 input[type=file] { color: var(--muted); max-width: 100%; }
 textarea { width: 100%; min-height: 4.5rem; resize: vertical; }
 label.check { display: flex; gap: .5rem; align-items: center; margin: .35rem 0; }
+form.settings h3 { margin: 1.4rem 0 .3rem; font-size: 1rem; color: var(--heading); }
+form.settings label:not(.check) { display: flex; flex-direction: column; gap: .3rem; max-width: 28rem; margin: .6rem 0;
+  color: var(--muted); font-size: .9rem; }
 input[type=checkbox] { accent-color: var(--accent); width: 1rem; height: 1rem; }
 
 button, .button {
