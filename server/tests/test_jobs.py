@@ -71,6 +71,24 @@ def test_the_key_is_created_once_on_first_use_and_kept(tmp_path):
     assert signing.get_signer(create_app(config)).fingerprint == fingerprint
 
 
+def test_info_names_the_key_devices_pinned(client, app):
+    device = enrol_device(client, app)
+    assert client.get("/api/v1/info").get_json()["signing_key_fingerprint"] == device["fingerprint"]
+
+
+def test_info_never_creates_the_key(tmp_path):
+    app = keyless_app(tmp_path)
+    assert app.test_client().get("/api/v1/info").get_json()["signing_key_fingerprint"] is None
+    assert not (tmp_path / signing.KEY_FILE).exists()
+
+
+def test_info_without_a_readable_key(tmp_path):
+    (tmp_path / signing.KEY_FILE).write_text("garbage")
+    app = keyless_app(tmp_path)
+    resp = app.test_client().get("/api/v1/info")
+    assert resp.status_code == 200 and resp.get_json()["signing_key_fingerprint"] is None
+
+
 def test_an_unreadable_key_is_never_replaced(tmp_path):
     (tmp_path / signing.KEY_FILE).write_text("garbage")
     app = create_app({"DATA_DIR": str(tmp_path), "DATABASE": str(tmp_path / "db.sqlite"), "SECRET_KEY": "test",

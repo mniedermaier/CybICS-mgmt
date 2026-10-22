@@ -298,6 +298,12 @@ enrolment code `CYBICS-BOARDS`. Boards join it on their own:
   puts it into a team from the fleet; the user switches actions on at the board.
 - A board whose enrolment is refused (`code_disabled`, `invalid_code`) waits until the network or
   the board restarts before it tries again, so a disabled code does not cause a stream of attempts.
+- **A server set up anew.** A board that was retired (`401`) stays retired, except when the server
+  on the default network is another one: once per uplink connection, landing reads `/info` and
+  enrols again if `signing_key_fingerprint` is present and differs from the key the board pinned
+  (`null` included). That is what a reflashed Raspberry Pi image looks like, with the same address
+  and an empty database; a retirement on the server the board enrolled with keeps its key and stays
+  final.
 
 The network's defaults are public, like the boards' own access points. The organiser changes the
 password in `cybics-mgmt.txt` on the Pi and on the boards' landing pages together.

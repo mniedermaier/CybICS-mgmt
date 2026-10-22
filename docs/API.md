@@ -39,11 +39,16 @@ Unauthenticated. The landing page's **Test connection** button calls this.
 
 ```json
 {"service": "cybics-mgmt", "name": "CybICS-mgmt", "version": "0.1.0", "api_version": 1,
- "server_time": 1790844304.29}
+ "server_time": 1790844304.29, "signing_key_fingerprint": "9f2c…"}
 ```
 
 `service` is always `"cybics-mgmt"`; the client compares it to tell this server from any other.
 `name` is the display name the organiser configured (`MGMT_SERVER_NAME`).
+`signing_key_fingerprint` is the fingerprint of the job-signing key devices pin at
+enrolment, or `null` while the server has none yet or cannot read it; `/info` never creates the key.
+A device whose token was refused with `401` compares it with the key it pinned: a different value
+(`null` included) means it is talking to another server, for example one set up anew on the same
+address, not the one that retired it. A server without the field (0.2.0 and earlier) tells nothing.
 
 ## `POST /enroll`
 
