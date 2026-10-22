@@ -130,6 +130,20 @@ def get_signer(app):
         return signer
 
 
+def current_fingerprint(app):
+    """
+    The fingerprint of the key devices pin, or None while the server has none
+    (or cannot read it). Never creates a key: /info calls this unauthenticated.
+    """
+    if ("fleet_signer" not in app.extensions and not app.config.get("FLEET_SIGNING_KEY")
+            and not os.path.exists(os.path.join(app.config["DATA_DIR"], KEY_FILE))):
+        return None
+    try:
+        return get_signer(app).fingerprint
+    except KeyUnavailable:
+        return None
+
+
 def replace_key(app):
     """
     A new key in place of the old one, missing or not: every device pinned

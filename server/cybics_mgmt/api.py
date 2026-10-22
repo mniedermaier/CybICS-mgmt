@@ -51,6 +51,12 @@ def rate_limit(key, limit_name):
 
 @bp.get("/info")
 def info():
-    """Unauthenticated; the landing page's 'Test connection' button calls this."""
+    """
+    Unauthenticated; the landing page's 'Test connection' button calls this.
+    signing_key_fingerprint lets a device that got a 401 tell a server that was
+    set up anew (another key) from a retirement on the one it enrolled with.
+    """
+    from .fleet import signing
     return jsonify({"service": "cybics-mgmt", "name": current_app.config["SERVER_NAME_DISPLAY"],
-                    "version": __version__, "api_version": API_VERSION, "server_time": now()})
+                    "version": __version__, "api_version": API_VERSION, "server_time": now(),
+                    "signing_key_fingerprint": signing.current_fingerprint(current_app)})
