@@ -58,6 +58,25 @@ TimeoutStartSec=300
 WantedBy=multi-user.target
 UNIT
 
+# The access point, once the server answers: boards joining it enrol right
+# away (cybics-mgmt-config holds it back at boot). No Requires= on the
+# containers: without them it still comes up, after cybics-mgmt-ap-up's wait.
+cat > /etc/systemd/system/cybics-mgmt-ap.service <<'UNIT'
+[Unit]
+Description=CybICS-mgmt: start the access point once the server answers
+Wants=NetworkManager.service
+After=NetworkManager.service cybics-mgmt.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/cybics-mgmt-ap-up
+TimeoutStartSec=420
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 # Address, Wi-Fi and admin password on the console login screen.
 cat > /etc/systemd/system/cybics-mgmt-issue.service <<'UNIT'
 [Unit]
@@ -103,4 +122,5 @@ WantedBy=multi-user.target
 UNIT
 
 systemctl enable cybics-mgmt-config.service cybics-mgmt-first-boot.service cybics-mgmt.service \
+    cybics-mgmt-ap.service \
     cybics-mgmt-issue.service cybics-mgmt-host.service cybics-mgmt-host.path

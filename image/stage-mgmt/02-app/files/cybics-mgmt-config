@@ -3,7 +3,8 @@
 Apply /boot/firmware/cybics-mgmt.txt at boot (cybics-mgmt-config.service).
 
 Runs before NetworkManager and the CybICS-mgmt containers start. Writes the
-access point's SSID and password into its NetworkManager profile, sets the
+access point's SSID and password into its NetworkManager profile, holds the
+access point back until the server answers (cybics-mgmt-ap-up), sets the
 Wi-Fi country, writes the server's settings into /opt/cybics-mgmt/.env, and
 decides whether the HDMI output shows the scoreboard (cybics-mgmt-kiosk).
 No password goes there: the admin password is set in the browser.
@@ -126,6 +127,29 @@ def replace_lines(path, values):
     return new != old
 
 
+def hold_back_autoconnect(path):
+    """Keep NetworkManager from starting the access point at boot.
+
+    Boards that join it before the server answers fail their first enrolment;
+    cybics-mgmt-ap-up starts it once the server is ready and switches
+    autoconnect back on. NetworkManager drops the key from the keyfile when it
+    holds the default, so it is added back under [connection] if missing.
+    True if the file changed.
+    """
+    if replace_lines(path, {"autoconnect": "false"}):
+        return True
+    with open(path, encoding="utf-8") as f:
+        old = f.read()
+    if re.search(r"(?m)^autoconnect=", old):
+        return False
+    new = re.sub(r"(?m)^\[connection\]$", "[connection]\nautoconnect=false", old, count=1)
+    if new != old:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new)
+        os.chmod(path, 0o600)
+    return new != old
+
+
 def set_country(country, problems):
     try:
         current = subprocess.run(["raspi-config", "nonint", "get_wifi_country"], capture_output=True,
@@ -178,6 +202,7 @@ def main():
     problems = []
     settings = read_settings(BOOT_FILE, problems)
     replace_lines(AP_PROFILE, {"ssid": settings["WIFI_SSID"], "psk": settings["WIFI_PASSWORD"]})
+    hold_back_autoconnect(AP_PROFILE)
     set_country(settings["WIFI_COUNTRY"], problems)
     write_env(settings)
     set_kiosk(settings)

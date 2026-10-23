@@ -9,12 +9,14 @@
 # never-default).
 #
 # cybics-mgmt-config rewrites ssid and psk from cybics-mgmt.txt on the boot
-# partition at every boot. Keyfiles only allow comments on lines of their own.
+# partition at every boot, and sets autoconnect=false: cybics-mgmt-ap-up
+# starts the access point once the server answers, so boards joining it can
+# enrol right away. Keyfiles only allow comments on lines of their own.
 [connection]
 id=cybics-mgmt-ap
 type=wifi
 interface-name=wlan0
-autoconnect=true
+autoconnect=false
 autoconnect-priority=100
 
 [wifi]

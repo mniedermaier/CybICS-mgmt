@@ -298,6 +298,10 @@ enrolment code `CYBICS-BOARDS`. Boards join it on their own:
   puts it into a team from the fleet; the user switches actions on at the board.
 - A board whose enrolment is refused (`code_disabled`, `invalid_code`) waits until the network or
   the board restarts before it tries again, so a disabled code does not cause a stream of attempts.
+  Only this server's own JSON error with a 4xx other than 429 is a refusal. A server that does not
+  answer yet, a 5xx, a 429 or a proxy's error page is tried again at the next check: the Pi's
+  access point comes up before its server, and a board that joins in that window must not wait for
+  the next reconnect.
 - **A server set up anew.** A board that was retired (`401`) stays retired, except when the server
   on the default network is another one: once per uplink connection, landing reads `/info` and
   enrols again if `signing_key_fingerprint` is present and differs from the key the board pinned
