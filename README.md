@@ -220,7 +220,9 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
    Wi-Fi name, **password** and **country**, and the boards' enrolment code. It is
    read at every boot, and the console lists any value it could not use. Later, the admin page
    *Raspberry Pi* changes the same settings and writes them back into this file.
-3. Boot the Pi. The first boot loads the containers and takes a few minutes.
+3. Boot the Pi. The first boot loads the containers and takes a few minutes. The Wi-Fi appears once
+   the server answers (after five minutes at the latest), so boards that join it can enrol right
+   away.
 4. Join the Wi-Fi with a laptop and open `http://10.42.0.1/admin`. The first visit sets the admin
    password; do it before participants join the network.
 5. Under *Passwords*, set a new password for the Pi's `pi` account (SSH and console): it starts as
