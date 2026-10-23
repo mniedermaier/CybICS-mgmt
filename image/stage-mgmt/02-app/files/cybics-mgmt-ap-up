@@ -1,0 +1,59 @@
+#!/usr/bin/python3
+"""
+Start the access point once the server answers (cybics-mgmt-ap.service).
+
+cybics-mgmt-config holds the access point back at every boot. A CybICS board
+joins it as soon as it appears and enrols right away; before the server
+answers, that first attempt fails, and boards up to CybICS v1.2.6 only try
+again after their uplink reconnects. So the access point comes up after the
+server, or after WAIT seconds without one, so the Pi stays reachable. Its
+autoconnect is switched back on for the rest of the boot, so NetworkManager
+restores it after a Wi-Fi hiccup.
+"""
+import subprocess
+import sys
+import time
+import urllib.request
+
+AP_CONNECTION = "cybics-mgmt-ap"
+HEALTH_URL = "http://127.0.0.1/healthz"
+WAIT = 300
+
+
+def server_ready():
+    try:
+        with urllib.request.urlopen(HEALTH_URL, timeout=5) as resp:  # noqa: S310
+            return resp.status == 200
+    except OSError:
+        return False
+
+
+def wait_for_server(wait=WAIT, ready=server_ready, clock=time.monotonic, sleep=time.sleep):
+    """True once the server answers, False after `wait` seconds without it."""
+    deadline = clock() + wait
+    while True:
+        if ready():
+            return True
+        if clock() >= deadline:
+            return False
+        sleep(2)
+
+
+def nmcli(*args):
+    return subprocess.run(["nmcli", *args], capture_output=True, text=True, timeout=60)
+
+
+def main():
+    if not wait_for_server():
+        print(f"the server did not answer within {WAIT} s; starting the access point anyway",
+              file=sys.stderr)
+    nmcli("connection", "modify", AP_CONNECTION, "connection.autoconnect", "yes")
+    result = nmcli("connection", "up", AP_CONNECTION)
+    if result.returncode != 0:
+        print(result.stderr.strip(), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

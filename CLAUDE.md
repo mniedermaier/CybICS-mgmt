@@ -81,7 +81,8 @@ Never stage `server/data/`, `*.sqlite`, `.env` or anything holding a real admin 
 - `tools/slowloris_check.py`: proves that slow clients cannot starve gunicorn. CI runs it.
 - `image/`: the Raspberry Pi image (Pi 3, 4, 5, Zero 2 W). `build.sh` builds both containers for
   arm64 and runs pi-gen (submodule `image/pi-gen`, branch `arm64`, pinned like CybICS'). The stage
-  `image/stage-mgmt/` ships the `cybics-mgmt` access point (10.42.0.1/24), the compose stack on port
+  `image/stage-mgmt/` ships the `cybics-mgmt` access point (10.42.0.1/24; held back at boot until the
+  server answers, by `cybics-mgmt-ap-up`, so boards that join it can enrol), the compose stack on port
   80 (generated from `docker-compose.yml`, so there is one source), `cybics-mgmt.txt` on the boot
   partition, applied at every boot by `cybics-mgmt-config`, and (`03-kiosk/`) the HDMI kiosk: `cage`
   and Chromium on tty1 as the user `cybics-kiosk`, showing `/scoreboard`, switched by

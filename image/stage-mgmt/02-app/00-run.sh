@@ -15,6 +15,7 @@ ls -lh "${ROOTFS_DIR}/opt/cybics-mgmt/images/"
 install -m 755 files/cybics-mgmt-config "${ROOTFS_DIR}/usr/local/sbin/cybics-mgmt-config"
 install -m 755 files/cybics-mgmt-issue "${ROOTFS_DIR}/usr/local/sbin/cybics-mgmt-issue"
 install -m 755 files/cybics-mgmt-host "${ROOTFS_DIR}/usr/local/sbin/cybics-mgmt-host"
+install -m 755 files/cybics-mgmt-ap-up "${ROOTFS_DIR}/usr/local/sbin/cybics-mgmt-ap-up"
 
 # Requests from the server to the host (the pi password): a tmpfs directory,
 # mounted into the server by the compose override.
