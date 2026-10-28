@@ -30,6 +30,10 @@
            autocomplete="off" spellcheck="false" required></label>
     <label>Country (two letters, e.g. DE)<input type="text" name="WIFI_COUNTRY" value="{{ s.WIFI_COUNTRY }}" minlength="2" maxlength="2"
            required></label>
+    <label>Channel (2.4 GHz; 12 and 13 not in the US or Canada)
+      <select name="WIFI_CHANNEL">
+        {% for value in range(1, 14) | map("string") %}<option value="{{ value }}" {{ 'selected' if s.WIFI_CHANNEL == value }}>{{ value }}</option>{% endfor %}
+      </select></label>
     <label class="check"><input type="checkbox" name="confirm_wifi" value="1"> Restart the access point if the Wi-Fi changes</label>
 
     <h3>Server</h3>

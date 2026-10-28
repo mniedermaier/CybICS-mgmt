@@ -14,6 +14,10 @@ WIFI_SSID=cybics-mgmt
 WIFI_PASSWORD=cybics-mgmt
 # Two-letter country code, e.g. DE, AT, CH, GB, US. Wi-Fi stays off without it.
 WIFI_COUNTRY=US
+# 2.4 GHz channel, 1 to 13 (12 and 13 are not allowed in US and CA). Pick the
+# one with the fewest other networks in the room; the CybICS boards' own
+# training networks count too.
+WIFI_CHANNEL=6
 
 # The password of the web interface is not set here: the first visit to
 # http://10.42.0.1/admin sets it in the browser. Do that before participants

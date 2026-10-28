@@ -51,7 +51,7 @@ TAKEN = os.path.join(PRIVATE, "request.json")
 USER = "pi"
 CONFIG = "/usr/local/sbin/cybics-mgmt-config"
 AP_CONNECTION = "cybics-mgmt-ap"
-WIFI_KEYS = {"WIFI_SSID", "WIFI_PASSWORD", "WIFI_COUNTRY"}
+WIFI_KEYS = {"WIFI_SSID", "WIFI_PASSWORD", "WIFI_COUNTRY", "WIFI_CHANNEL"}
 SERVER_KEYS = {"SERVER_NAME", "DEFAULT_ENROL_CODE"}
 HDMI_KEYS = {"HDMI_SCOREBOARD", "HDMI_THEME"}
 
