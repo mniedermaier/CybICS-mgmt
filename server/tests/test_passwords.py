@@ -207,7 +207,7 @@ def test_without_a_host_directory_there_is_no_pi_section(admin):
 
 # ---------- the Raspberry Pi's settings (cybics-mgmt.txt) ----------
 
-PI_SETTINGS = {"WIFI_SSID": "cybics-mgmt", "WIFI_PASSWORD": "cybics-mgmt", "WIFI_COUNTRY": "US",
+PI_SETTINGS = {"WIFI_SSID": "cybics-mgmt", "WIFI_PASSWORD": "cybics-mgmt", "WIFI_COUNTRY": "US", "WIFI_CHANNEL": "6",
                "DEFAULT_ENROL_CODE": "CYBICS-BOARDS", "SERVER_NAME": "CybICS-mgmt", "HDMI_SCOREBOARD": "auto",
                "HDMI_THEME": "dark"}
 
@@ -268,10 +268,21 @@ def test_wifi_changes_need_a_confirmation_and_stay_out_of_the_log(fresh):
         assert not get_db().execute("SELECT 1 FROM admin_log WHERE details LIKE '%new-wifi-secret%'").fetchone()
 
 
+def test_a_new_channel_restarts_the_access_point(fresh):
+    client = logged_in(fresh)
+    reported(fresh)
+    assert b'<option value="6" selected>' in client.get("/admin/pi").data
+    assert b"Tick the box" in save(client, WIFI_CHANNEL="11").data
+    save(client, WIFI_CHANNEL="11", confirm_wifi="1")
+    assert settings_request(fresh) == {"settings": {"WIFI_CHANNEL": "11"}}
+
+
 @pytest.mark.parametrize("changes, message", [
     ({"WIFI_SSID": "bad\\name"}, b"Wi-Fi name must be"),
     ({"WIFI_PASSWORD": "short"}, b"Wi-Fi password must be"),
     ({"WIFI_COUNTRY": "Germany"}, b"Wi-Fi country must be"),
+    ({"WIFI_CHANNEL": "14"}, b"Wi-Fi channel must be"),
+    ({"WIFI_CHANNEL": "0"}, b"Wi-Fi channel must be"),
     ({"DEFAULT_ENROL_CODE": "a b"}, b"Enrolment code for boards must be"),
     ({"SERVER_NAME": "It's mine"}, b"Server name must be"),
     ({"SERVER_NAME": "two\nlines"}, b"Server name must be"),
@@ -307,7 +318,7 @@ def test_the_settings_rules_match_the_ones_the_pi_applies_at_boot():
     assert set(host.SETTINGS) == set(config.CHECKS) == set(config.DEFAULTS)
     samples = ["", "x", "ab", "DE", "de", "Germany", "cybics-mgmt", "pass\\word12", "a" * 33, "a" * 64, "a" * 65,
                "CYBICS-BOARDS", "room 2", "It's", "two\nlines", "auto", "ON", "off", "maybe", "dark", "Light",
-               "Ünïcödé-Netz", "12345678"]
+               "Ünïcödé-Netz", "12345678", "0", "1", "06", "11", "13", "14", "100"]
     for key in host.SETTINGS:
         for value in samples:
             clean, problems = host.settings_problems({key: value})

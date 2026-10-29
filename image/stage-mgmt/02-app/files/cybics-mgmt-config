@@ -3,7 +3,7 @@
 Apply /boot/firmware/cybics-mgmt.txt at boot (cybics-mgmt-config.service).
 
 Runs before NetworkManager and the CybICS-mgmt containers start. Writes the
-access point's SSID and password into its NetworkManager profile, holds the
+access point's SSID, password and channel into its NetworkManager profile, holds the
 access point back until the server answers (cybics-mgmt-ap-up), sets the
 Wi-Fi country, writes the server's settings into /opt/cybics-mgmt/.env, and
 decides whether the HDMI output shows the scoreboard (cybics-mgmt-kiosk).
@@ -25,6 +25,9 @@ KIOSK_FILE = "/run/cybics-mgmt-kiosk"
 KIOSK_AUTO_MIN_KB = 768 * 1024
 # Root's own tmpfs directory (see cybics-mgmt-host), not the one the server can write to.
 PROBLEMS_FILE = "/run/cybics-mgmt-host/config-problems"
+# Countries that allow only the 2.4 GHz channels 1 to 11. The access point does
+# not start on a channel its country forbids, so 12 and 13 fall back there.
+CHANNELS_1_TO_11 = {"US", "CA"}
 
 CHECKS = {
     # NetworkManager keyfiles treat a backslash as an escape, so none is allowed.
@@ -33,6 +36,7 @@ CHECKS = {
     "WIFI_PASSWORD": (lambda v: re.fullmatch(r"[\x20-\x5b\x5d-\x7e]{8,63}", v),
                       "8 to 63 printable ASCII characters without a backslash"),
     "WIFI_COUNTRY": (lambda v: re.fullmatch(r"[A-Z]{2}", v), "a two-letter country code"),
+    "WIFI_CHANNEL": (lambda v: re.fullmatch(r"[1-9]|1[0-3]", v), "a 2.4 GHz channel from 1 to 13"),
     "DEFAULT_ENROL_CODE": (lambda v: v == "" or re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,15}", v),
                            "empty, or 4 to 16 letters, digits or dashes"),
     "SERVER_NAME": (lambda v: 1 <= len(v) <= 64 and "'" not in v and v.isprintable(),
@@ -41,7 +45,7 @@ CHECKS = {
     "HDMI_THEME": (lambda v: v in ("dark", "light"), "dark or light"),
 }
 DEFAULTS = {"WIFI_SSID": "cybics-mgmt", "WIFI_PASSWORD": "cybics-mgmt", "WIFI_COUNTRY": "US",
-            "DEFAULT_ENROL_CODE": "CYBICS-BOARDS", "SERVER_NAME": "CybICS-mgmt",
+            "WIFI_CHANNEL": "6", "DEFAULT_ENROL_CODE": "CYBICS-BOARDS", "SERVER_NAME": "CybICS-mgmt",
             "HDMI_SCOREBOARD": "auto", "HDMI_THEME": "dark"}
 
 
@@ -150,6 +154,16 @@ def hold_back_autoconnect(path):
     return new != old
 
 
+def channel(settings, problems):
+    """The access point's channel: WIFI_CHANNEL, unless the country forbids it."""
+    value = settings["WIFI_CHANNEL"]
+    if int(value) > 11 and settings["WIFI_COUNTRY"] in CHANNELS_1_TO_11:
+        problems.append(f"WIFI_CHANNEL {value} is not allowed in {settings['WIFI_COUNTRY']}; "
+                        f"using {DEFAULTS['WIFI_CHANNEL']}")
+        return DEFAULTS["WIFI_CHANNEL"]
+    return value
+
+
 def set_country(country, problems):
     try:
         current = subprocess.run(["raspi-config", "nonint", "get_wifi_country"], capture_output=True,
@@ -202,6 +216,7 @@ def main():
     problems = []
     settings = read_settings(BOOT_FILE, problems)
     replace_lines(AP_PROFILE, {"ssid": settings["WIFI_SSID"], "psk": settings["WIFI_PASSWORD"]})
+    replace_lines(AP_PROFILE, {"channel": channel(settings, problems)})
     hold_back_autoconnect(AP_PROFILE)
     set_country(settings["WIFI_COUNTRY"], problems)
     write_env(settings)

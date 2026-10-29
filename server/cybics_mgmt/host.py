@@ -39,6 +39,8 @@ SETTINGS = {
                       "8 to 63 printable ASCII characters without a backslash", str),
     "WIFI_COUNTRY": ("Wi-Fi country", lambda v: re.fullmatch(r"[A-Z]{2}", v), "a two-letter country code",
                      str.upper),
+    "WIFI_CHANNEL": ("Wi-Fi channel", lambda v: re.fullmatch(r"[1-9]|1[0-3]", v), "a 2.4 GHz channel from 1 to 13",
+                     str),
     "DEFAULT_ENROL_CODE": ("Enrolment code for boards",
                            lambda v: v == "" or re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,15}", v),
                            "empty, or 4 to 16 letters, digits or dashes", str.upper),
@@ -47,7 +49,7 @@ SETTINGS = {
     "HDMI_SCOREBOARD": ("Scoreboard on HDMI", lambda v: v in ("auto", "on", "off"), "auto, on or off", str.lower),
     "HDMI_THEME": ("HDMI theme", lambda v: v in ("dark", "light"), "dark or light", str.lower),
 }
-WIFI_KEYS = ("WIFI_SSID", "WIFI_PASSWORD", "WIFI_COUNTRY")
+WIFI_KEYS = ("WIFI_SSID", "WIFI_PASSWORD", "WIFI_COUNTRY", "WIFI_CHANNEL")
 
 
 def directory():

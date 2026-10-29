@@ -1,4 +1,4 @@
-"""The Raspberry Pi image's access point comes up only once the server answers."""
+"""The Raspberry Pi image's access point: its channel, and it comes up only once the server answers."""
 import importlib.machinery
 import importlib.util
 import os
@@ -60,6 +60,32 @@ def test_a_profile_networkmanager_rewrote_without_the_key_gets_it_back(profile):
         text = f.read()
     assert text.startswith("[connection]\nautoconnect=false\nid=cybics-mgmt-ap\n")
     assert autoconnect(path) == ["false"]
+
+
+def test_the_channel_from_cybics_mgmt_txt_goes_into_the_shipped_profile(profile):
+    config = load("cybics-mgmt-config")
+    with open(os.path.join(STAGE, "01-network", "files", "cybics-mgmt-ap.nmconnection"), encoding="utf-8") as f:
+        path = profile(f.read())
+    assert config.replace_lines(path, {"channel": "11"})
+    with open(path, encoding="utf-8") as f:
+        assert re.findall(r"(?m)^channel=(.*)$", f.read()) == ["11"]
+
+
+@pytest.mark.parametrize("country, wanted, used", [
+    ("DE", "13", "13"), ("US", "11", "11"), ("US", "13", "6"), ("CA", "12", "6"), ("GB", "1", "1"),
+])
+def test_a_channel_the_country_forbids_falls_back_to_the_default(country, wanted, used):
+    config = load("cybics-mgmt-config")
+    problems = []
+    assert config.channel({"WIFI_COUNTRY": country, "WIFI_CHANNEL": wanted}, problems) == used
+    assert bool(problems) == (wanted != used)
+
+
+def test_the_shipped_settings_file_names_every_setting():
+    config = load("cybics-mgmt-config")
+    problems = []
+    settings = config.read_settings(os.path.join(STAGE, "02-app", "files", "cybics-mgmt.txt"), problems)
+    assert problems == [] and settings == config.DEFAULTS
 
 
 class Clock:

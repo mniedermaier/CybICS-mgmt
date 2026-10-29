@@ -206,7 +206,7 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
 
 | | Default |
 |---|---|
-| Wi-Fi network | `cybics-mgmt`, password `cybics-mgmt`, 2.4 GHz, channel 6 |
+| Wi-Fi network | `cybics-mgmt`, password `cybics-mgmt`, 2.4 GHz, channel 6 (`WIFI_CHANNEL`) |
 | Web interface | `http://10.42.0.1` or `http://cybics-mgmt.local` |
 | Admin password | set in the browser at the first visit to `http://10.42.0.1/admin` |
 | Enrolment code for CybICS boards | `CYBICS-BOARDS` |
@@ -217,7 +217,7 @@ that also hosts the Wi-Fi network. Every release has the SD card image attached
 1. Write the image to an SD card (`xzcat *-CybICS-mgmt-*.img.xz | sudo dd of=/dev/sdX bs=4M
    conv=fsync status=progress`, or Raspberry Pi Imager under "Use custom").
 2. Before the first boot, open the card's boot partition on any computer and edit `cybics-mgmt.txt`:
-   Wi-Fi name, **password** and **country**, and the boards' enrolment code. It is
+   Wi-Fi name, **password**, **country** and channel, and the boards' enrolment code. It is
    read at every boot, and the console lists any value it could not use. Later, the admin page
    *Raspberry Pi* changes the same settings and writes them back into this file.
 3. Boot the Pi. The first boot loads the containers and takes a few minutes. The Wi-Fi appears once
