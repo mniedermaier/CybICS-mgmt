@@ -108,14 +108,14 @@ def test_reconciliation_resends_lost_solves(server, event, tmp_path, app):
         assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 150
 
 
-def test_solves_from_before_enrolment_are_not_reported(server, event, tmp_path, app):
-    landing = Landing(solved=["physical_process", "plc_programming"])  # old progress on a reused Pi
+def test_solves_from_before_joining_are_reported(server, event, tmp_path, app):
+    landing = Landing(solved=["physical_process", "plc_programming"])  # solved before connecting
     client = landing.client(tmp_path / "s.json")
     connect(client, server, event["join_code"], "Red Team", "secret-12")
     client.sync_once()
     client.sync_once()
     with app.app_context():
-        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 0
+        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 250
 
 
 def test_solve_while_paused_does_not_count_later(server, event, tmp_path, app):
@@ -278,16 +278,25 @@ def test_client_errors_on_a_solve_are_final(server, event, tmp_path):
     assert client.snapshot()["ctf"]["pending"] == 0
 
 
-def test_enrol_fails_if_progress_is_unreadable(server, event, tmp_path, app):
-    def broken():
-        raise ValueError("progress file is mid-write")
+def test_unreadable_progress_is_reported_once_readable(server, event, tmp_path, app):
+    progress = {"readable": False}
 
-    client = MgmtClient(str(tmp_path / "s.json"), local_solves=broken, device_info=lambda: dict(VIRTUAL))
-    with pytest.raises(MgmtClientError) as exc:
-        connect(client, server, event["join_code"], "Red Team", "secret-12")
-    assert exc.value.code == "progress_unreadable"
+    def local_solves():
+        if not progress["readable"]:
+            raise ValueError("progress file is mid-write")
+        return ["physical_process"]
+
+    client = MgmtClient(str(tmp_path / "s.json"), local_solves=local_solves, flag_for=FLAGS.get,
+                        device_info=lambda: dict(VIRTUAL))
+    connect(client, server, event["join_code"], "Red Team", "secret-12")
+    client.sync_once()
     with app.app_context():
-        assert get_db().execute("SELECT COUNT(*) FROM instances").fetchone()[0] == 0
+        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 0
+    progress["readable"] = True
+    client.sync_once()
+    client.sync_once()
+    with app.app_context():
+        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 100
 
 
 def test_banned_team_keeps_retrying_and_recovers(server, event, tmp_path, app):
@@ -393,7 +402,7 @@ def test_report_solve_never_raises(server, event, tmp_path, monkeypatch):
 
 
 def test_reenrol_after_revocation_keeps_unreported_solves(server, event, tmp_path, app):
-    landing = Landing(solved=["defense_firewall"])       # old progress: baseline
+    landing = Landing(solved=["defense_firewall"])       # solved before connecting
     client = landing.client(tmp_path / "s.json")
     connect(client, server, event["join_code"], "Red Team", "secret-12")
     with app.app_context():
@@ -405,11 +414,11 @@ def test_reenrol_after_revocation_keeps_unreported_solves(server, event, tmp_pat
     client.sync_once()
     client.sync_once()
     with app.app_context():
-        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 100, \
-            "the solve made while revoked counts, the old baseline still does not"
+        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 350, \
+            "the solve made while revoked counts, and so does the one from before connecting"
 
 
-def test_leave_and_rejoin_keeps_queue_but_not_solves_made_while_away(server, event, tmp_path, app):
+def test_leave_and_rejoin_keeps_queue_and_solves_made_while_away(server, event, tmp_path, app):
     landing = Landing()
     client = landing.client(tmp_path / "s.json")
     connect(client, server, event["join_code"], "Red Team", "secret-12")
@@ -423,10 +432,10 @@ def test_leave_and_rejoin_keeps_queue_but_not_solves_made_while_away(server, eve
     client.sync_once()
     with app.app_context():
         board = {e["name"]: e["score"] for e in ctf.scoreboard(get_db(), event["id"])}
-    assert board["Red Team"] == 100
+    assert board["Red Team"] == 250
 
 
-def test_switching_team_does_not_carry_solves_over(server, event, tmp_path, app):
+def test_switching_team_reports_the_local_solves_to_the_new_team(server, event, tmp_path, app):
     landing = Landing()
     client = landing.client(tmp_path / "s.json")
     connect(client, server, event["join_code"], "Team Alpha", "secret-12")
@@ -439,7 +448,7 @@ def test_switching_team_does_not_carry_solves_over(server, event, tmp_path, app)
     client.sync_once()
     with app.app_context():
         board = {e["name"]: e["score"] for e in ctf.scoreboard(get_db(), event["id"])}
-    assert board == {"Team Alpha": 100, "Team Bravo": 0}
+    assert board == {"Team Alpha": 100, "Team Bravo": 100}
 
 
 def test_foreign_401_does_not_unenrol(server, event, tmp_path, monkeypatch):

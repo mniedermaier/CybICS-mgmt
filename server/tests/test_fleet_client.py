@@ -10,7 +10,7 @@ import threading
 import pytest
 from werkzeug.serving import make_server
 
-from conftest import SIGNING_KEY
+from conftest import CATALOG, FLAGS, SIGNING_KEY
 from cybics_mgmt.db import get_db
 from cybics_mgmt.fleet import jobs
 from cybics_mgmt.fleet import logic as fleet
@@ -350,17 +350,22 @@ def test_the_threads_run_jobs_without_help(app, server, code, tmp_path):
 def test_the_client_follows_the_organiser_into_and_out_of_a_team(app, server, code, tmp_path):
     from cybics_mgmt.ctf import logic as ctf
     landing = Landing()
-    landing.solved = ["physical_process"]               # old progress: the baseline
+    landing.solved = ["physical_process"]               # solved before the organiser assigned it
     client = enrolled(landing, tmp_path, server, code)
+    client.flag_for = FLAGS.get
     with app.app_context():
         db = get_db()
         event = ctf.create_event(db, "assigned", "Assigned")
+        ctf.import_catalog(db, event["id"], json.dumps(CATALOG))
+        ctf.set_event_state(db, event["id"], "running")
         team = ctf.create_team(db, event["id"], "Blue Team", "blue-pass-1")
         ctf.assign(db, fleet.get_device(db, client.state["device_id"]), team["id"])
     assert client.sync_once()
     view = client.snapshot()["ctf"]
     assert view["joined"] and view["team"]["name"] == "Blue Team" and view["event"]["slug"] == "assigned"
-    assert client.state["ctf"]["baseline"] == ["physical_process"]
+    assert client.sync_once()                           # the next round reports the old solve
+    with app.app_context():
+        assert ctf.scoreboard(get_db(), event["id"])[0]["score"] == 100
     with app.app_context():
         ctf.leave(get_db(), client.state["device_id"])
     assert client.sync_once()
