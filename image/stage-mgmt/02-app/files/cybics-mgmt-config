@@ -215,8 +215,8 @@ def set_kiosk(settings):
 def main():
     problems = []
     settings = read_settings(BOOT_FILE, problems)
-    replace_lines(AP_PROFILE, {"ssid": settings["WIFI_SSID"], "psk": settings["WIFI_PASSWORD"],
-                               "channel": channel(settings, problems)})
+    replace_lines(AP_PROFILE, {"ssid": settings["WIFI_SSID"], "psk": settings["WIFI_PASSWORD"]})
+    replace_lines(AP_PROFILE, {"channel": channel(settings, problems)})
     hold_back_autoconnect(AP_PROFILE)
     set_country(settings["WIFI_COUNTRY"], problems)
     write_env(settings)
