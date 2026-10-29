@@ -80,7 +80,7 @@ October 2026).
 | `ctf_config.json` is the source of truth | The server imports that file and does not maintain its own challenge list. It stores only a SHA-256 of each flag. |
 | The server is optional | All behaviour is opt-in, and the client makes no network calls until it is enrolled. A server outage never affects local play: reports are queued and retried. |
 | No identity on the installation | Enrolment makes it a device, with an id and a bearer token that authenticates every call. Physical boards also send their STM32 UID, so a reflashed board replaces its old registration in its team. |
-| Progress persists in the container layer | A reused Pi may already have solves. The client records a baseline when it joins a team and never reports solves older than that. |
+| Progress persists in the container layer | A reused Pi may already have solves. The client reports every local solve, including those from before it joined its team, so the organiser resets the local progress of reused boards before an event (the job `reset_progress`). |
 | Teams share a laptop or use several | A team has a name and a password. Every device that joins with both becomes a member of that team, and solves are counted per team. |
 
 ## Components
@@ -189,8 +189,8 @@ Every report must survive the server being down, so the client keeps its state i
    The same heartbeat also carries the device's management settings and job results
    ([MGMT_DESIGN.md](MGMT_DESIGN.md#jobs)).
 4. **Reconcile.** While the event is running, any local solve that is unknown to the server is queued
-   again. This excludes the baseline, rejected and held solves, and solves already in the outbox. It
-   covers a lost outbox and solves made while the device was offline. Voided solves stay on the
+   again. This excludes rejected and held solves, and solves already in the outbox. It covers a lost
+   outbox, solves made while the device was offline and solves made before it joined. Voided solves stay on the
    team's record, so reconciliation does not bring them back.
 5. **Out of the event, and back.** When a heartbeat answers `"ctf": null` or `/solves` answers
    `409 not_in_event` (the organiser took the device out, or deleted its team or event), the client
@@ -198,13 +198,14 @@ Every report must survive the server being down, so the client keeps its state i
    most likely coming back.
    - When the device is in a team again, by joining or because the organiser put it there (the
      heartbeat names a new `instance_id`), the client adopts the membership. If it is the same team
-     of the same event, the outbox, the baseline and every held or rejected decision carry over, so
+     of the same event, the outbox and every held or rejected decision carry over, so
      nothing is lost or reported twice. "Same event" means the same slug **and** creation time. An
      event deleted and recreated under the old slug starts fresh, and so does another team.
    - The same carry-over applies after the user disconnects and connects again (a new device) and
      then joins the same team.
-   - Solves made while the user had *left* the event on purpose are treated like solves from before
-     joining, and are not reported.
+   - Solves made while the user had *left* the event on purpose are reported once the device is
+     back in a team, like every other local solve. A device that moves to another team reports its
+     local solves to that team too.
    - A `403 team_banned` changes nothing, because the organiser can reinstate the team; the client
      keeps retrying with backoff.
    - `401` means the device was retired. The client stops talking to the server until the user

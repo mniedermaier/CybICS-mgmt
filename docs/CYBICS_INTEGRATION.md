@@ -40,11 +40,10 @@ mgmt.start()   # sleeps until connected; no network traffic before that
 - `device_uid`: the STM32 UID on the Pi (see section 2). A physical device without one cannot enrol.
 - `cybics_version`, `mode` and `hostname`.
 
-`local_solves` must **raise** when the progress cannot be read. It must not return an empty list.
-When the device joins a team, the client stores the current local solves as a baseline that is never
-reported. If the callback returns an empty list because of a read error, every old solve on a reused
-board is reported as new. Raising makes the join fail with `progress_unreadable`, and the user tries
-again.
+`local_solves` should **raise** when the progress cannot be read rather than return an empty list.
+Every heartbeat reconciles the full local list with the server and queues what the server does not
+know, including solves from before the device joined its team. A read error then only delays that
+until the next heartbeat.
 
 In v1.2.3, `CTFManager.load_progress` catches `JSONDecodeError` and returns empty progress, so
 landing needs a strict variant for this callback:
@@ -106,8 +105,7 @@ writes it for end users.
     connecting again enrols a new device.
   - `revoked` means the organiser retired the device: show it, and offer to connect again.
 - Suggested routes:
-  - `GET /api/settings/mgmt` returns `mgmt.snapshot()`, which never contains the token, the key or
-    the baseline;
+  - `GET /api/settings/mgmt` returns `mgmt.snapshot()`, which never contains the token or the key;
   - `POST /api/settings/mgmt/test`, `/connect`, `/join`, `/leave-event`, `/allowed` and
     `/disconnect`.
 
